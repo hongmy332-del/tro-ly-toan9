@@ -14,6 +14,8 @@ import pandas as pd
 import streamlit as st
 
 from math_tasks import TASKS
+from circle_curriculum import TOPIC_NAME, LESSONS, EXERCISES, guess_lesson, lesson_exercises
+from circle_tutor import ask_tutor, next_self_practice
 from tutor_engine import feedback_on_attempt, generate_hint, secret_value, is_substantive_attempt, chat_response, ai_is_enabled, review_reasoning, gemini_connection_test
 from storage import (all_assessments, all_sessions, assessment_summary,
                      save_assessment, to_csv_bytes, upsert_session)
@@ -66,6 +68,15 @@ background:radial-gradient(circle at 86% 18%,rgba(114,231,224,.24) 0,transparent
 .foot{font-size:.8rem;color:#7a8ea3;text-align:center;margin-top:45px;padding:14px;border-top:1px solid #edf1f7}
 @media(max-width:740px){.block-container{padding:1.0rem .75rem 2rem}.hero{padding:24px 20px;border-radius:20px}.hero:after{font-size:38px;right:5px;bottom:-10px}.phase-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.phase-card{padding:12px;min-height:111px}.stage-steps{grid-template-columns:repeat(2,1fr)}.task{padding:14px 17px;font-size:1rem}}
 @media(prefers-reduced-motion:reduce){.stButton>button{transition:none!important}}
+.topic-intro{margin:20px 0 10px;padding:24px;border:1px solid #d9e7ff;border-radius:18px;background:linear-gradient(125deg,#f2f7ff,#f0fcff)}
+.topic-intro h3{margin:8px 0;font-size:1.25rem}.topic-intro p{color:#516c88;margin-bottom:0}
+.topic-eyebrow{font-size:.77rem;letter-spacing:.05em;font-weight:800;color:#006b91}
+.topic-hero{padding:26px 30px;border-radius:22px;margin-bottom:22px;background:linear-gradient(110deg,#194183,#206dd9 55%,#12a4b9);color:white;box-shadow:0 12px 22px rgba(21,90,156,.15)}
+.topic-hero h2{color:white;margin:7px 0;font-size:clamp(1.45rem,3vw,2.15rem)}
+.topic-hero p{color:#ebfcff;line-height:1.65}.topic-hero span{font-size:.75rem;font-weight:800;letter-spacing:.06em;color:#d5eafc}
+.topic-step-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}
+.topic-step-row span{background:#eef6ff;border:1px solid #dbe9f8;padding:10px 8px;border-radius:12px;text-align:center;color:#254d7d;font-size:.78rem;font-weight:700}
+@media(max-width:740px){.topic-hero{padding:20px}.topic-step-row{grid-template-columns:repeat(2,1fr)}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -130,14 +141,21 @@ def home():
         <p>Em tự tìm hướng giải · Trợ lý hỏi đúng chỗ vướng · Em kiểm chứng và tự giải bài mới.</p></div>""", unsafe_allow_html=True)
     tiles = [
         ("S0", "🧠 Tự tư duy", "Viết ý tưởng của riêng em"),
-        ("S1", "💬 Gợi mở", "Tối đa ba mức hỗ trợ"),
+        ("S1", "💬 Gợi mở", "Hỗ trợ đúng chỗ vướng"),
         ("S2", "🔎 Phản biện", "Kiểm tra từng lập luận"),
         ("S3", "🚀 Vận dụng", "Tự làm bài toán mới"),
     ]
     st.markdown('<div class="phase-grid">' + ''.join(
         f'<div class="phase-card"><span class="tag">{tag}</span><div class="title">{title}</div><div class="desc">{desc}</div></div>'
         for tag, title, desc in tiles) + '</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-kicker">CHỌN BÀI HỌC • TOÁN 9 KẾT NỐI TRI THỨC</div>', unsafe_allow_html=True)
+    st.markdown('<div class="topic-intro"><div class="topic-eyebrow">🌟 KHÁM PHÁ NGÂN HÀNG HỌC LIỆU CHƯƠNG V</div><h3>Đường tròn · 5 bài học · 40 bài luyện tập tự biên soạn</h3><p>Nhập bài toán em đang vướng; trợ lý sẽ hỏi em từng bước như một gia sư. Có thể chọn một bài trong kho hoặc tự nhập đề.</p></div>', unsafe_allow_html=True)
+    if st.button('💬 HỎI GIA SƯ CHỦ ĐỀ ĐƯỜNG TRÒN →', key='goto_circle_tutor', type='primary', use_container_width=True):
+        st.session_state.screen = 'Gia sư Đường tròn'
+        st.rerun()
+    with st.expander('📚 Khám phá 5 bài học trong chủ đề Đường tròn'):
+        for lid, lesson in LESSONS.items():
+            st.write(f"**{lesson['title']}** · {len(lesson_exercises(lid))} bài luyện — {lesson['summary']}")
+    st.markdown('<div class="section-kicker">CHẾ ĐỘ CŨ · LUYỆN THEO BÀI MẪU S0–S3</div>', unsafe_allow_html=True)
     st.subheader('Hôm nay em muốn khám phá chủ đề nào?')
     icons = {"circles":"◉", "radicals":"√", "quadratic":"x²", "system":"∑"}
     cols = st.columns(2)
@@ -147,9 +165,9 @@ def home():
                 st.markdown(f'<div class="lesson-card"><div class="lesson-title">{icons.get(tid,"✦")} {html.escape(task["title"])}</div><div class="lesson-meta">{html.escape(task["topic"])} · {html.escape(task["duration"])}</div></div>',unsafe_allow_html=True)
                 if st.button('Bắt đầu học  →', key=f'home_{tid}', type='primary', use_container_width=True):
                     st.session_state['pref_task'] = tid
-                    st.session_state.screen = 'Học với chatbot'
+                    st.session_state.screen = 'Luyện bài mẫu S0–S3'
                     st.rerun()
-    st.info('**Phiên bản 2.1 – thử nghiệm.** Khi chưa bật Gemini, ứng dụng dùng câu hỏi giáo viên biên soạn. Khi bật Gemini, trợ lý có thể đặt câu hỏi linh hoạt hơn theo bài làm, nhưng có thể sai và phải được giáo viên giám sát. Không nhập dữ liệu cá nhân.')
+    st.info('**Phiên bản 3.0 – thử nghiệm (Chương V).** Khi chưa bật Gemini, ứng dụng dùng câu hỏi giáo viên biên soạn. Khi bật Gemini, trợ lý có thể đặt câu hỏi linh hoạt hơn theo bài làm, nhưng có thể sai và phải được giáo viên giám sát. Không nhập dữ liệu cá nhân.')
 
 
 def start_or_continue():
@@ -451,7 +469,7 @@ def stage_complete(s, task):
 def personal_log():
     st.title("🗂️ Nhật ký lượt học")
     if not st.session_state.session:
-        st.info("Hãy chọn 'Học với chatbot' để bắt đầu. Nhật ký ở đây là lượt học hiện tại trên trình duyệt của em.")
+        st.info("Hãy chọn 'Gia sư Đường tròn' hoặc 'Luyện bài mẫu S0–S3' để bắt đầu. Nhật ký ở đây thuộc phiên trình duyệt hiện tại.")
         return
     s = st.session_state.session
     st.write(f"**Học sinh:** {s['student_code']}   |   **Chủ đề:** {TASKS[s['task_id']]['title']}")
@@ -507,7 +525,7 @@ def show_admin_sessions():
         "nhat_ky_S0_S3_thu_nghiem.csv", mime="text/csv")
     choices = list(range(len(records)))
     ix = st.selectbox("Xem chi tiết lượt học", choices,
-        format_func=lambda i: f"{records[i]['student_code']} | {TASKS.get(records[i]['task_id'],{}).get('title',records[i]['task_id'])} | {records[i]['started_at'][:16]}")
+        format_func=lambda i: f"{records[i]['student_code']} | {TASKS.get(records[i]['task_id'], LESSONS.get(records[i]['task_id'], {})).get('title',records[i]['task_id'])} | {records[i]['started_at'][:16]}")
     rec = records[ix]
     with st.expander("Bản ghi chi tiết", expanded=False):
         st.write("**S0**", rec["s0"])
@@ -593,7 +611,7 @@ def teacher_dashboard():
             else:
                 st.warning(message)
 
-    tabs = st.tabs(["Nhật ký S0–S3", "Nhập kết quả thật", "Biểu đồ trước–sau", "Đáp án GV"])
+    tabs = st.tabs(["Nhật ký S0–S3", "Nhập kết quả thật", "Biểu đồ trước–sau", "Đáp án GV", "📚 Kho học liệu Đường tròn"])
     with tabs[0]: show_admin_sessions()
     with tabs[1]: show_assessment_form()
     with tabs[2]: show_results()
@@ -610,14 +628,202 @@ def teacher_dashboard():
                 st.write("**Đáp án GV:**", task["teacher_key"])
 
 
+    with tabs[4]:
+        st.subheader("Ngân hàng học liệu Chương V – Đường tròn")
+        st.info("Kho do giáo viên biên soạn: 5 bài học, 40 bài luyện; giao diện chỉ hiển thị đáp án trong Góc giáo viên. Lưu ý: nếu GitHub công khai thì mã nguồn có chứa đáp án; không dùng các bài này làm bài kiểm tra kín.")
+        st.metric("Số bài luyện tự biên soạn", len(EXERCISES))
+        lids = list(LESSONS)
+        chosen = st.selectbox("Bài học", lids, format_func=lambda k: LESSONS[k]["title"], key="teacher_lesson")
+        for name, value in LESSONS[chosen]["concepts"]:
+            st.markdown(f"**{name}:** {value}")
+        st.write("**Sai lầm thường gặp:**", "; ".join(LESSONS[chosen]["misconceptions"]))
+        for ex in lesson_exercises(chosen):
+            with st.expander(f"{ex['id']} · {ex['title']} · Mức {ex['level']}"):
+                st.write("**Đề tự biên soạn:**", ex["problem"])
+                st.write("**Ba mức gợi ý tham chiếu:**")
+                for i, q in enumerate(ex["hints"],1): st.write(f"{i}. {q}")
+                st.write("**Đáp án giáo viên:**", ex["teacher_answer"])
+        export = {"topic": TOPIC_NAME, "lessons": LESSONS, "exercises": EXERCISES,
+                  "note": "Học liệu tự biên soạn để giáo viên thẩm định; không dùng như dữ liệu kết quả thực nghiệm"}
+        st.download_button("⬇️ Tải toàn bộ học liệu và đáp án (JSON – chỉ giáo viên)",
+                           json.dumps(export, ensure_ascii=False, indent=2).encode("utf-8"),
+                           "hoc_lieu_chu_de_duong_tron_Toan9_GV.json", mime="application/json")
+
+
+def circle_topic_tutor():
+    """Gia sư hội thoại tự nhiên; cho nhập đề bất kỳ trong toàn chương, vẫn đo quá trình S0–S3."""
+    st.markdown('<div class="topic-hero"><span>TRỢ LÝ GỢI MỞ TOÁN 9</span><h2>💬 Hỏi gia sư chủ đề Đường tròn</h2><p>Em đặt câu hỏi mình chưa biết · Trợ lý tìm kiến thức liên quan · Em từng bước tự giải.</p></div>', unsafe_allow_html=True)
+    if "circle_chat" not in st.session_state:
+        st.session_state.circle_chat = None
+    ss = st.session_state.circle_chat
+    if not ss:
+        st.write("### Em muốn nhờ trợ lý hướng dẫn bài toán nào?")
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            code = st.text_input("Mã học sinh (không dùng tên thật)", value="HS01", key="topic_code", max_chars=6)
+        with col2:
+            mode = st.selectbox("Bài học", ["auto"] + list(LESSONS),
+                format_func=lambda x: "Tự nhận diện trong Chương V" if x == "auto" else LESSONS[x]["title"],
+                key="topic_lesson_choice")
+        choose = st.radio("Cách nhập bài", ["Nhập đề bài của em", "Chọn bài trong ngân hàng"], horizontal=True, key="topic_input_mode")
+        chosen = None
+        if choose == "Chọn bài trong ngân hàng":
+            pool = EXERCISES if mode == "auto" else lesson_exercises(mode)
+            options = {e["id"]: e for e in pool}
+            eid = st.selectbox("Chọn bài để học", list(options), format_func=lambda k: f"{k} · {options[k]['title']}")
+            chosen = options[eid]
+            problem = chosen["problem"]
+            st.info(problem)
+        else:
+            problem = st.text_area("Nhập nguyên văn đề toán em chưa biết làm", height=145,
+                placeholder="Ví dụ: Cho hai đường tròn (O; 5 cm) và (O'; 3 cm), OO' = 2 cm. Hai đường tròn có mấy điểm chung? Vì sao?",
+                key="topic_problem")
+            st.caption("Bản 3.0 hỗ trợ nhập đề dạng chữ. Hình vẽ/ảnh đề bài sẽ được phát triển và kiểm thử riêng.")
+        allow_ai = ai_is_enabled()
+        use_ai = st.checkbox("Cho phép sử dụng Gemini để gợi mở trong lượt học thử", value=False, disabled=not allow_ai,
+                             help="Nội dung đề và tin nhắn (đã giảm thiểu dữ liệu cá nhân) sẽ gửi tới dịch vụ Gemini khi bật.")
+        if not allow_ai:
+            st.caption("Gemini chưa sẵn sàng trong cấu hình này; trợ lý vẫn dùng ngân hàng câu hỏi do giáo viên biên soạn.")
+        st.warning("Chỉ dùng mã học sinh giả và đề thử ở giai đoạn này; không nhập tên, số điện thoại hoặc dữ liệu riêng tư. Mã HS không phải tài khoản đăng nhập có bảo mật.")
+        if st.button("🚀 Bắt đầu trao đổi với gia sư", type="primary", use_container_width=True):
+            if not re.fullmatch(r"[A-Za-z0-9_-]{3,10}", code.strip()):
+                st.error("Mã học sinh gồm 3–10 ký tự, chỉ chữ, số, dấu gạch dưới hoặc gạch ngang.")
+            elif len(problem.strip()) < 15:
+                st.warning("Em nhập đề bài đầy đủ hơn một chút nhé.")
+            else:
+                lid = chosen["lesson"] if chosen else (mode if mode != "auto" else guess_lesson(problem)[0])
+                st.session_state.circle_chat = {
+                    "id": str(uuid.uuid4()), "student_code": code.strip().upper(), "problem": problem.strip()[:2500],
+                    "selected_lesson": lid, "chosen_exercise": chosen,
+                    "messages": [{"role":"assistant", "text":"Mình đã nhận đề của em. Trước khi gợi ý, em đã thử cách nào? Em có thể viết một bước, kể cả khi chưa đúng nhé.", "source":"Khởi động S0"}],
+                    "phase": "S0", "turns": 0, "highest_hint":None, "s0":"", "s2":"", "s3_problem":"", "s3_answer":"", "use_ai": bool(use_ai and allow_ai),
+                    "started_at":now(), "answered_practice_id":None,
+                }
+                st.rerun()
+        with st.expander("📚 Xem kiến thức được chuẩn bị trong Chương V"):
+            for lid, content in LESSONS.items():
+                st.write(f"**{content['title']}** — {content['summary']}")
+        return
+
+    if st.button("↩ Chọn bài toán khác", key="topic_reset"):
+        st.session_state.circle_chat = None
+        st.rerun()
+    lid = ss.get("selected_lesson")
+    title = LESSONS[lid]["title"] if lid in LESSONS else "Chưa xác định chính xác mạch kiến thức"
+    st.caption(f"Mã học sinh thử: {ss['student_code']} · {title} · Nguồn: {'Gemini + kho giáo viên' if ss['use_ai'] and ai_is_enabled() else 'Kho học liệu giáo viên'}")
+    with st.container(border=True):
+        st.markdown("**📝 Đề bài em đang cần hướng dẫn**")
+        st.write(ss["problem"])
+    st.markdown('<div class="topic-step-row"><span>🧠 S0 · Tự thử</span><span>💡 S1 · Gợi mở</span><span>🔍 S2 · Tự kiểm chứng</span><span>🚀 S3 · Tự vận dụng</span></div>', unsafe_allow_html=True)
+    st.caption("Trợ lý chỉ hỏi từng bước, không đưa lời giải hoàn chỉnh. Nếu thấy câu hỏi chưa đúng, em hãy nhờ giáo viên kiểm tra.")
+    for m in ss["messages"]:
+        with st.chat_message("assistant" if m["role"] == "assistant" else "user", avatar="🤖" if m["role"] == "assistant" else "🧑‍🎓"):
+            st.write(m["text"])
+            if m.get("source") and m["role"] == "assistant":
+                st.caption(m["source"])
+    if ss["phase"] in ("S0", "S1", "S2"):
+        incoming = st.chat_input("Viết bước em đã thử hoặc câu hỏi em đang vướng…", key=f"topic_chat_input_{ss['id']}")
+        if incoming:
+            if len(incoming.strip()) < 3:
+                st.warning("Em viết rõ hơn một chút nhé.")
+            else:
+                ss["messages"].append({"role":"student", "text":incoming.strip()[:1400]})
+                if ss["phase"] == "S0":
+                    ss["s0"] = incoming.strip()[:1400]
+                    ss["phase"] = "S1"
+                ss["turns"] += 1
+                # Ghi số lượt hỗ trợ riêng. KHÔNG đồng nhất số tin nhắn AI với MỨC GỢI Ý.
+                question, source, meta = ask_tutor(ss["problem"], incoming, lid,
+                    ss["messages"], ss["turns"], ss["use_ai"], chosen_exercise=ss.get("chosen_exercise"))
+                # Chỉ gán mức 1–3 nếu câu hỏi thực sự là mức trong bộ học liệu cố định.
+                if ss.get("chosen_exercise") and not meta.get("ai_used"):
+                    level = min(3, ss["turns"])
+                    ss["highest_hint"] = max(ss["highest_hint"] or 0, level)
+                ss["messages"].append({"role":"assistant", "text":question, "source":source, "meta":meta})
+                st.rerun()
+    if ss["phase"] in ("S0", "S1", "S2"):
+        st.divider()
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("📝 Em đã có hướng giải – tự kiểm chứng", use_container_width=True, disabled=ss['phase']=="S0"):
+                ss["phase"] = "S2"
+                st.rerun()
+        with c2:
+            if st.button("🚀 Chuyển sang bài vận dụng độc lập", use_container_width=True, disabled=ss['phase']=="S0"):
+                target = ss.get("selected_lesson")
+                skip = set()
+                if ss.get("chosen_exercise"):
+                    skip.add(ss["chosen_exercise"]["id"])
+                nxt = next_self_practice(target, forbidden_ids=skip)
+                if nxt:
+                    ss["s3_problem"] = nxt["problem"]
+                    ss["answered_practice_id"] = nxt["id"]
+                    ss["phase"] = "S3"
+                    st.rerun()
+                else:
+                    st.warning("Chưa nhận diện đủ chắc bài học của em để chọn bài vận dụng riêng. Hãy chọn đúng bài học hoặc nhờ giáo viên giao bài độc lập.")
+    if ss["phase"] == "S2":
+        with st.expander("🔍 Tự đối chiếu lập luận (S2)", expanded=True):
+            ss["s2"] = st.text_area("Viết lập luận hoàn chỉnh bằng lời của em", value=ss.get("s2", ""),
+                                     key=f"tutor_s2_{ss['id']}", height=125)
+            st.caption("Em nên kiểm tra: đã ghi đúng giả thiết; đã giải thích từng phép suy luận; đã xét đủ điều kiện chưa?")
+    if ss["phase"] == "S3":
+        st.info("**S3 – Tự làm độc lập.** Trong nhiệm vụ này trợ lý không gửi gợi ý, không chấm tự động và không hiển thị đáp án.")
+        st.markdown("### Bài vận dụng")
+        st.write(ss["s3_problem"])
+        answer = st.text_area("Bài giải của em (không hỏi AI trong lúc làm)", value=ss.get("s3_answer", ""),
+                              key=f"tutor_s3_{ss['id']}", height=175)
+        if st.button("✅ Nộp bài vận dụng", type="primary"):
+            if len(answer.strip()) < 15:
+                st.warning("Em cần trình bày thêm cách lập luận trước khi nộp.")
+            else:
+                ss["s3_answer"] = answer
+                ss["phase"] = "Done"
+                st.rerun()
+    if ss["phase"] == "Done":
+        st.success("Em đã nộp bài độc lập. Giáo viên sẽ kiểm tra và nhận xét; trợ lý không tự cho điểm.")
+    export = {"name":"TRỢ LÝ GỢI MỞ TOÁN 9", "topic":TOPIC_NAME,
+              "student_code":ss["student_code"], "session_id":ss["id"], "started_at":ss["started_at"],
+              "lesson":title,"problem":ss["problem"],"s0":ss["s0"],"conversation":ss["messages"],
+              "s2":ss.get("s2",""),"s3_problem":ss["s3_problem"],"s3_answer":ss["s3_answer"],
+              "highest_hint_level":ss["highest_hint"], "number_of_tutor_questions":ss["turns"], "record_status":ss["phase"],
+              "notes":"Dữ liệu lượt thử lưu trong phiên trình duyệt; không thay cho minh chứng có xác thực."}
+    st.download_button("📥 Tải nhật ký hỏi gia sư (JSON)",
+        json.dumps(export,ensure_ascii=False,indent=2).encode("utf-8"),
+        f"nhat_ky_{ss['student_code']}_{ss['id'][:8]}.json", mime="application/json")
+    with st.expander("Lưu lên nhật ký thử nghiệm của Góc giáo viên (tùy chọn)"):
+        st.caption("Lưu vào SQLite trên máy chủ thử nghiệm và CÓ THỂ MẤT khi ứng dụng khởi động lại. Chưa dùng cho hồ sơ chính thức hoặc dữ liệu cá nhân học sinh.")
+        consent = st.checkbox("Tôi chỉ dùng mã giả và nội dung thử nghiệm, đồng ý lưu lượt học lên máy chủ thử", key=f"topic_store_ok_{ss['id']}")
+        if st.button("Lưu nhật ký thử nghiệm", disabled=not consent, key=f"topic_store_{ss['id']}"):
+            saved = {
+                "session_id":ss["id"], "student_code":ss["student_code"],
+                "task_id":ss.get("selected_lesson") or "b17", "started_at":ss["started_at"],
+                "s0":ss.get("s0", ""), "s0_type":"A",
+                "hints":[{"text":m["text"],"source":m.get("source", "")}
+                         for m in ss["messages"] if m["role"]=="assistant" and m.get("source") != "Khởi động S0"],
+                "attempts":[{"text":m["text"],"phase":ss["phase"]}
+                            for m in ss["messages"] if m["role"]=="student"],
+                "s2":ss.get("s2",""), "s3":ss.get("s3_answer",""),
+                "highest_hint":ss["highest_hint"], "status":ss["phase"],
+                "support_mode":"Gia sư chủ đề Đường tròn", "ai_enabled":ss["use_ai"],
+            }
+            try:
+                upsert_session(saved)
+                st.success("Đã lưu nhật ký thử nghiệm. Giáo viên có thể xem trong Góc giáo viên; nhớ xuất CSV để sao lưu.")
+            except Exception:
+                st.error("Máy chủ chưa lưu được. Em vẫn có thể tải nhật ký JSON về máy.")
+
+
 def guide():
     st.title("❓ Hướng dẫn và giới hạn sử dụng")
+    st.subheader("Hỏi gia sư cho toàn bộ chủ đề Đường tròn")
+    st.write("Chọn **Gia sư Đường tròn**, nhập bài toán em tự chọn hoặc một bài trong kho 40 bài; ghi bước đã thử; trò chuyện để nhận câu hỏi từng bước; sau đó tự kiểm chứng và làm bài mới độc lập. Ứng dụng có học liệu từ cả Bài 13 đến Bài 17, không phải một bài cố định.")
     st.subheader("Dành cho học sinh")
-    st.write("1. Chọn 'Học với chatbot', nhập mã HSxx và chủ đề. 2. Ghi S0 trước khi nhận gợi ý. 3. Khi cần, mở gợi ý từng mức rồi viết bước em đã thử. 4. Trình bày lời giải S2. 5. Làm bài S3 không có hỗ trợ. 6. Tải tệp JSON nếu giáo viên yêu cầu.")
+    st.write("1. Chọn 'Gia sư Đường tròn', nhập mã HSxx và bài toán riêng (hoặc bài trong ngân hàng). 2. Ghi bước em đã thử. 3. Trao đổi cùng trợ lý bằng câu hỏi ngắn, tự kiểm chứng. 4. Chọn bài vận dụng mới không có AI. 5. Xuất nhật ký JSON; chỉ lưu lên máy chủ thử nghiệm nếu được phép.")
     st.subheader("Dành cho giáo viên")
     st.write("Cấu hình ADMIN_PASSWORD trong Streamlit Secrets, mở Góc giáo viên để xem nhật ký và nhập dữ liệu đánh giá thực tế. Có thể xuất CSV và bốn biểu đồ khi có cặp điểm trước/sau.")
     st.subheader("Khác biệt giữa chatbot theo kịch bản và chatbot AI")
-    st.write("**Mặc định:** Câu hỏi gợi ý 3 mức được giáo viên kiểm duyệt, có quy tắc sơ bộ phát hiện một vài kiểu sai lầm; chạy không cần API và không tự giải toán.")
+    st.write("**Mặc định:** Gia sư tham chiếu học liệu được giáo viên biên soạn cho cả Chương V. Khi không có Gemini, mức độ hiểu đề tự nhập còn hạn chế; câu hỏi dự phòng chủ yếu theo mạch kiến thức.")
     st.write("**Tùy chọn:** Khi giáo viên cấu hình GEMINI_API_KEY và bật ENABLE_GEMINI_FOR_STUDENTS=true, học sinh có thể chọn sử dụng Gemini. Nội dung S0/S1 khi đó được gửi tới dịch vụ Gemini; chỉ bật sau khi nhà trường xác nhận điều kiện bảo vệ dữ liệu. AI có thể sai hoặc lộ cách giải.")
     st.subheader("Lưu ý đạo đức và kỹ thuật")
     st.write("- Không nhập họ tên, địa chỉ, số điện thoại, thông tin sức khỏe hoặc dữ liệu riêng tư.\n"
@@ -629,9 +835,9 @@ def guide():
 
 init_state()
 with st.sidebar:
-    st.markdown("## 📘 TRỢ LÝ TOÁN 9")
+    st.markdown("## 📘 TRỢ LÝ GỢI MỞ TOÁN 9")
     st.caption("Ứng dụng thử nghiệm · Chương trình KNTT")
-    sections = ["Trang chủ", "Học với chatbot", "Nhật ký cá nhân", "Góc giáo viên", "Hướng dẫn"]
+    sections = ["Trang chủ", "Gia sư Đường tròn", "Luyện bài mẫu S0–S3", "Nhật ký cá nhân", "Góc giáo viên", "Hướng dẫn"]
     selected = st.radio("Điều hướng", sections, index=sections.index(st.session_state.screen),
                         label_visibility="collapsed")
     st.session_state.screen = selected
@@ -642,10 +848,11 @@ with st.sidebar:
         st.caption("Giai đoạn hiện tại: " + s["status"])
     st.caption("🟢 Chế độ: " + ("Gemini đã cấu hình (cần bật trong lượt học)" if ai_is_enabled() else "Câu hỏi thích ứng dự phòng – chưa bật Gemini"))
     st.caption("Không đăng nhập bằng họ tên thật")
-    st.caption("Phiên bản 2.1 · 11/2026")
+    st.caption("Phiên bản 3.0 · Chương V Đường tròn")
 
 if selected == "Trang chủ": home()
-elif selected == "Học với chatbot": start_or_continue()
+elif selected == "Gia sư Đường tròn": circle_topic_tutor()
+elif selected == "Luyện bài mẫu S0–S3": start_or_continue()
 elif selected == "Nhật ký cá nhân": personal_log()
 elif selected == "Góc giáo viên": teacher_dashboard()
 else: guide()
