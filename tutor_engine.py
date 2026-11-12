@@ -82,6 +82,126 @@ def _safe_question(text: str, task_id: str) -> bool:
     return True
 
 
+def _normalize_vietnamese(value: str) -> str:
+    """Chuẩn hóa lỗi gõ/diacritics để phát hiện một số lỗi phổ biến khi không có AI."""
+    import unicodedata
+    plain = unicodedata.normalize("NFD", (value or "").lower())
+    plain = "".join(c for c in plain if unicodedata.category(c) != "Mn")
+    plain = plain.replace("đ", "d")
+    return re.sub(r"\s+", " ", plain).strip()
+
+
+def diagnose_step(task_id: str, text: str) -> str:
+    """Nhận diện *sơ bộ* để đặt câu hỏi, tuyệt đối không dùng làm điểm chấm."""
+    t = _normalize_vietnamese(text)
+    compact = t.replace(" ", "")
+    if any(v in t for v in ("khong biet", "chua biet", "em bi tac", "khong hieu", "bat dau tu dau")):
+        return "stuck"
+    if task_id == "circles":
+        if "tiep xuc trong" in t:
+            return "touch_claim"
+        if "khong cat nhau" in t or "chua du" in t or "con thieu" in t:
+            return "needs_reason"
+        if "cat nhau" in t or "2 diem" in t:
+            return "only_sum"
+        if "hieu" in t or "r-r" in compact or "|5-3|" in compact or "|r-r|" in compact:
+            return "compared_difference"
+        if "tong" in t or "r+r" in compact:
+            return "only_sum"
+        return "general"
+    if task_id == "radicals":
+        if "= 7" in t or "=7" in compact or "can cua tong" in t or "can(9+16)" in compact:
+            return "sqrt_sum"
+        if "5" in t and "7" in t: return "compared_sides"
+        return "general"
+    if task_id == "quadratic":
+        if ("x = 2" in t or "x=2" in compact) and ("x = 3" in t or "x=3" in compact): return "both_roots"
+        if "x=2" in compact or "x = 2" in t: return "one_root"
+        return "general"
+    if task_id == "system":
+        if "y" in t and ("dau" in t or "cong" in t): return "sign_error"
+        return "general"
+    return "general"
+
+
+def guided_question(task: dict, student_text: str, level: int = 1, phase: str = "S1") -> tuple[str, str]:
+    """Câu hỏi thích ứng dự phòng, bám theo *chính* lỗi vừa viết, không giải hộ."""
+    tid = task.get("id", "")
+    level = max(1, min(int(level), 3))
+    category = diagnose_step(tid, student_text)
+    is_review = phase == "S2"
+    if tid == "circles":
+        if category == "only_sum":
+            questions = (
+                "Em đang dựa vào d < R + r. Điều kiện đó đã đủ để kết luận hai đường tròn cắt nhau tại hai điểm chưa?",
+                "Em thử xét thêm mối quan hệ giữa d và |R − r|; liệu có trường hợp đặc biệt nào không?",
+                "Với R = 5, r = 3, d = 2, em tính |R − r| rồi đối chiếu với d. Khi hai giá trị bằng nhau, hình vẽ cho thấy điều gì?"
+            )
+        elif category == "touch_claim":
+            questions = (
+                "Em đã nhận xét về tiếp xúc trong. Em có thể giải thích tại sao d bằng hiệu hai bán kính lại có ý nghĩa hình học không?",
+                "Em hãy nêu điều kiện phân biệt tiếp xúc trong và cắt nhau tại hai điểm, bằng ký hiệu R, r, d.",
+                "Em thử phác hình và kiểm tra số điểm chung để bảo vệ kết luận của mình trước bạn học."
+            )
+        elif category == "compared_difference":
+            questions = (
+                "Em đã nghĩ đến hiệu hai bán kính. Bước kế tiếp cần so sánh hiệu đó với dữ kiện nào?",
+                "Điều gì xảy ra khi d bằng |R − r|, khác gì trường hợp d lớn hơn |R − r|?",
+                "Em hãy mô tả số điểm chung theo hình vẽ trong hai trường hợp vừa so sánh."
+            )
+        elif category == "needs_reason":
+            questions = (
+                "Em nói còn thiếu điều kiện. Em chỉ ra giúp mình chính xác đại lượng nào chưa được so sánh nhé?",
+                "Em hãy thử viết đủ hai mốc |R − r| và R + r trên cùng một trục số.",
+                "Theo em, d = |R − r| thuộc trường hợp tiếp xúc hay cắt nhau? Hãy giải thích bằng hình vẽ."
+            )
+        else:
+            questions = (
+                "Em hãy xác định ba đại lượng R, r, d và cho biết chúng giúp ta so sánh điều gì?",
+                "Hãy so sánh d với cả R + r và |R − r|; mốc nào cần chú ý trước?",
+                "Em vẽ phác hai đường tròn với dữ kiện đã cho: có thể lập luận về số điểm chung từ hình vẽ không?"
+            )
+        return questions[level-1], category
+    if tid == "radicals":
+        if category == "sqrt_sum":
+            questions = (
+                "Em đã kiểm tra riêng vế trái và vế phải của đẳng thức căn thức chưa?",
+                "Em thử tính √(9 + 16) và √9 + √16 một cách độc lập, rồi so sánh chúng.",
+                "Nếu hai giá trị không bằng nhau, điều đó cho biết gì về quy tắc căn của tổng?"
+            )
+        else:
+            questions = (
+                "Em đang dùng tính chất nào của căn bậc hai? Em có thể kiểm tra bằng số cụ thể không?",
+                "Em có thể chọn một ví dụ số đơn giản để kiểm tra tính chất vừa nêu không?",
+                "Em có thể diễn đạt vì sao phản ví dụ đủ để bác bỏ một khẳng định đúng với mọi số không?"
+            )
+        return questions[level-1], category
+    if tid == "quadratic":
+        if category == "both_roots":
+            questions = (
+                "Em đã tìm được hai giá trị. Em kiểm tra từng giá trị bằng cách thay vào phương trình ban đầu được không?",
+                "Em có thể giải thích vì sao cách phân tích thành nhân tử không bỏ sót nghiệm nào không?",
+                "Em hãy trình bày cách kiểm chứng cả hai nghiệm để thuyết phục bạn học."
+            )
+        else:
+            questions = (
+                "Em đã xác định được tất cả các trường hợp tích bằng 0 hay mới một trường hợp?",
+                "Em có thể phân tích đa thức thành nhân tử rồi xét từng thừa số bằng 0 không?",
+                "Sau khi tìm đủ nghiệm, em có thể thay lần lượt vào phương trình ban đầu để kiểm tra không?"
+            )
+        return questions[level-1], category
+    if tid == "system":
+        questions = (
+            "Em hãy xem trong hai phương trình, biến nào có hệ số đối nhau?",
+            "Khi cộng hai phương trình, dấu của các hạng tử chứa y thay đổi như thế nào?",
+            "Em thử thay cặp nghiệm tìm được vào cả hai phương trình; có cùng thỏa mãn không?"
+        )
+        return questions[level-1], category
+    if is_review:
+        return "Em hãy giải thích bước nào chứng minh kết luận; còn điều kiện nào cần tự kiểm tra?", category
+    return task["hints"][level - 1], category
+
+
 def _ask_gemini(task: dict, level: int, student_text: str, teacher_hint: str,
                 purpose: str) -> str | None:
     """Sinh *một câu hỏi* bằng Gemini. Trả None nếu không đủ điều kiện dùng AI."""
@@ -149,8 +269,7 @@ def ai_hint(task: dict, level: int, student_text: str, fallback: str) -> Tuple[s
 
 
 def generate_hint(task: dict, level: int, previous_text: str, use_ai: bool):
-    err = classify_error(task.get("id", ""), previous_text)
-    base = curated_hint(task, level, err)
+    base, err = guided_question(task, previous_text, level, "S1")
     if use_ai:
         return (*ai_hint(task, level, previous_text, base), err)
     return base, "Ngân hàng giáo viên", err
@@ -182,4 +301,40 @@ def chat_response(task: dict, student_text: str, use_ai: bool, level: int = 1):
         q = _ask_gemini(task, max(level, 1), student_text, base, "Đối thoại theo bước học sinh vừa thử")
         if q:
             return q, "AI Gemini"
-    return base, "Ngân hàng giáo viên"
+    targeted, _ = guided_question(task, student_text, level=max(1, level), phase="S1")
+    return targeted, "Câu hỏi thích ứng theo lỗi phổ biến (không dùng AI)"
+
+
+def review_reasoning(task: dict, student_text: str, use_ai: bool, review_turn: int = 1):
+    """Phản biện S2 dưới dạng một câu hỏi. Không xác nhận đúng tuyệt đối hay chấm điểm."""
+    level = min(3, max(1, int(review_turn)))
+    question, diagnostic = guided_question(task, student_text, level, "S2")
+    if SOLUTION_REQUEST.search(student_text or ""):
+        return "Em hãy viết ít nhất một nhận xét của mình về dữ kiện hoặc điều kiện trước khi xin hỗ trợ nhé?", "Nguyên tắc tự lực", diagnostic
+    if use_ai:
+        asked = _ask_gemini(task, level, student_text, question, "S2 – đặt câu hỏi kiểm chứng một lập luận cụ thể, KHÔNG giải thay")
+        if asked:
+            return asked, "AI Gemini – phản biện có kiểm soát", diagnostic
+    return question, "Câu hỏi phản biện thích ứng (dự phòng)", diagnostic
+
+
+def gemini_connection_test() -> tuple[bool, str]:
+    """Chỉ giáo viên sử dụng. Không đưa API key hoặc lỗi chứa khóa ra UI."""
+    if not secret_value("GEMINI_API_KEY"):
+        return False, "Chưa có GEMINI_API_KEY trong Secrets."
+    if not ai_is_enabled():
+        return False, "Đã có khóa API nhưng ENABLE_GEMINI_FOR_STUDENTS chưa bật true."
+    try:
+        from google import genai
+        client = genai.Client(api_key=secret_value("GEMINI_API_KEY"))
+        result = client.models.generate_content(
+            model=secret_value("GEMINI_MODEL") or "gemini-3.8-flash",
+            contents="Chỉ trả lời một từ tiếng Việt: SẴN SÀNG",
+        )
+        if result.text and result.text.strip():
+            return True, "Gemini đã phản hồi được yêu cầu kiểm tra (không gửi dữ liệu học sinh)."
+        return False, "Gemini không trả về văn bản; kiểm tra hạn mức và cấu hình mô hình."
+    except Exception as error:
+        label = type(error).__name__
+        # Không hiện nội dung lỗi gốc vì đôi khi có URL chứa thông tin nhạy cảm.
+        return False, f"Không kết nối được: {label}. Kiểm tra tên mô hình, quyền API, hạn mức và nhật ký máy chủ."

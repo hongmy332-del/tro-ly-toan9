@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from math_tasks import TASKS
-from tutor_engine import feedback_on_attempt, generate_hint, secret_value, is_substantive_attempt, chat_response, ai_is_enabled
+from tutor_engine import feedback_on_attempt, generate_hint, secret_value, is_substantive_attempt, chat_response, ai_is_enabled, review_reasoning, gemini_connection_test
 from storage import (all_assessments, all_sessions, assessment_summary,
                      save_assessment, to_csv_bytes, upsert_session)
 
@@ -149,7 +149,7 @@ def home():
                     st.session_state['pref_task'] = tid
                     st.session_state.screen = 'Học với chatbot'
                     st.rerun()
-    st.info('**Phiên bản 2.0 – thử nghiệm.** Khi chưa bật Gemini, ứng dụng dùng câu hỏi giáo viên biên soạn. Khi bật Gemini, trợ lý có thể đặt câu hỏi linh hoạt hơn theo bài làm, nhưng có thể sai và phải được giáo viên giám sát. Không nhập dữ liệu cá nhân.')
+    st.info('**Phiên bản 2.1 – thử nghiệm.** Khi chưa bật Gemini, ứng dụng dùng câu hỏi giáo viên biên soạn. Khi bật Gemini, trợ lý có thể đặt câu hỏi linh hoạt hơn theo bài làm, nhưng có thể sai và phải được giáo viên giám sát. Không nhập dữ liệu cá nhân.')
 
 
 def start_or_continue():
@@ -245,6 +245,15 @@ def stage_s1(s, task):
 
     highest = s["highest_hint"]
     ai_on = bool(s.get("ai_enabled")) and ai_is_enabled()
+    if not ai_on and ai_is_enabled():
+        st.info("Gemini đã được giáo viên cấu hình, nhưng lượt học này chưa chọn dùng AI. Em có thể bật tại đây để trợ lý đọc bước giải vừa viết.")
+        consent_ai = st.checkbox("Tôi đồng ý dùng câu trả lời học tập ẩn danh để Gemini đặt câu hỏi (không nhập thông tin cá nhân)", key="consent_ai_mid_session")
+        if st.button("🤖 Bật Gemini cho lượt học hiện tại", disabled=not consent_ai):
+            s["ai_enabled"] = True
+            save_current()
+            st.rerun()
+    elif not ai_is_enabled():
+        st.caption("Hiện Gemini chưa bật trong Settings → Secrets. Bộ câu hỏi thích ứng theo lỗi phổ biến vẫn hoạt động; đây không phải AI ngôn ngữ tự nhiên.")
     status_cols = st.columns([1.2, 2, 1.8])
     with status_cols[0]:
         st.metric("Mức gợi ý", f"{highest}/3")
@@ -323,20 +332,65 @@ def stage_s1(s, task):
 
 
 def stage_s2(s, task):
-    stage_header("S2", "Kiểm chứng và phản biện", "Viết lại lời giải và giải thích vì sao em giữ hoặc sửa lập luận. Giáo viên sẽ đánh giá sản phẩm này.")
+    stage_header("S2", "Kiểm chứng và phản biện cùng trợ lý",
+                 "Em viết lập luận của mình, rồi có thể xin một câu hỏi phản biện để tự kiểm tra trước khi nộp. Không chấm điểm tự động.")
     task_box(task["s0"])
-    with st.expander("Xem bộ câu hỏi tự kiểm tra", expanded=True):
+    with st.expander("📋 Các câu hỏi tự kiểm tra của giáo viên", expanded=False):
         for c in task["s2_check"]:
             st.write("• " + c)
-    with st.form("s2_form"):
-        solution = st.text_area("Lời giải / cách sửa sai của em", height=220,
-                                value=s.get("s2", ""), placeholder="Em hãy nêu căn cứ, từng bước lập luận và kết luận của mình...")
-        submitted = st.form_submit_button("Lưu S2 và sang bài vận dụng độc lập", type="primary")
-    if submitted:
-        if len(solution.strip()) < 30:
-            st.warning("Em cần trình bày rõ lập luận hơn (ít nhất khoảng 30 ký tự).")
+
+    ai_on = bool(s.get("ai_enabled")) and ai_is_enabled()
+    if ai_on:
+        st.caption("🤖 Phản biện bằng Gemini nếu kết nối thành công; nếu không, dùng câu hỏi dự phòng.")
+    elif ai_is_enabled():
+        st.info("Gemini đã cấu hình nhưng lượt học chưa bật AI. Bạn có thể bật tại S2 mà không cần làm lại S0.")
+        agree = st.checkbox("Tôi đồng ý gửi chỉ nội dung bài Toán 9 không có thông tin cá nhân cho Gemini", key="s2_ai_consent")
+        if st.button("🤖 Bật Gemini để phản biện S2", disabled=not agree):
+            s["ai_enabled"] = True
+            save_current()
+            st.rerun()
+    else:
+        st.caption("📘 Phản biện bằng câu hỏi thích ứng dự phòng. Để dùng Gemini, giáo viên cần bật ENABLE_GEMINI_FOR_STUDENTS trong Secrets trước.")
+    sid = s["session_id"][:10]
+    draft = st.text_area(
+        "Lời giải / lập luận em muốn kiểm tra", key=f"s2_draft_{sid}",
+        height=210, value=s.get("s2", ""),
+        placeholder="Ví dụ: Em kết luận hai đường tròn cắt nhau vì d < R + r..."
+    )
+    reviews = [item for item in s["hints"] if item.get("phase") == "S2"]
+    if reviews:
+        st.markdown("**Những câu hỏi phản biện đã nhận:**")
+        for i, item in enumerate(reviews, 1):
+            st.info(f"**Câu hỏi {i}:** {item['text']}\n\n_{item.get('source', 'Câu hỏi tự kiểm tra')}_")
+        st.caption("Hãy bổ sung lập luận của em vào ô bên trên trước khi hoàn tất.")
+    a, b = st.columns(2)
+    with a:
+        ask = st.button(
+            f"🔎 Hỏi phản biện ({len(reviews)}/2)",
+            disabled=len(reviews) >= 2, use_container_width=True
+        )
+    with b:
+        submitted = st.button("✅ Lưu S2 và sang S3", type="primary", use_container_width=True)
+    if ask:
+        if len(draft.strip()) < 18:
+            st.warning("Em hãy viết một bước suy luận cụ thể trước khi yêu cầu trợ lý phản biện.")
         else:
-            s["s2"] = solution.strip()
+            task_for_engine = dict(task, id=s["task_id"])
+            with st.spinner("Đang lựa chọn câu hỏi phản biện theo lập luận của em...") if ai_on else st.empty():
+                q, source, diagnosed = review_reasoning(
+                    task_for_engine, draft.strip(), ai_on, review_turn=len(reviews) + 1)
+            s["s2"] = draft.strip()
+            s["attempts"].append({"phase": "S2", "time": now(), "text": draft.strip()})
+            s["hints"].append({"phase": "S2", "level": max(1, s["highest_hint"]),
+                               "text": q, "source": source, "error_hint": diagnosed, "time": now()})
+            s["highest_hint"] = max(1, s["highest_hint"])
+            save_current()
+            st.rerun()
+    if submitted:
+        if len(draft.strip()) < 30:
+            st.warning("Em cần trình bày rõ lý do và điều kiện đã kiểm chứng (ít nhất 30 ký tự).")
+        else:
+            s["s2"] = draft.strip()
             s["status"] = "S3"
             save_current()
             st.rerun()
@@ -530,6 +584,15 @@ def show_results():
 def teacher_dashboard():
     if not access_teacher():
         return
+    with st.expander("🔌 Kiểm tra kết nối Gemini (chỉ giáo viên)"):
+        st.caption("Bấm để kiểm tra API và mô hình bằng câu hỏi thử, không gửi bài học sinh.")
+        if st.button("Kiểm tra Gemini ngay", key="probe_gemini"):
+            connected, message = gemini_connection_test()
+            if connected:
+                st.success(message)
+            else:
+                st.warning(message)
+
     tabs = st.tabs(["Nhật ký S0–S3", "Nhập kết quả thật", "Biểu đồ trước–sau", "Đáp án GV"])
     with tabs[0]: show_admin_sessions()
     with tabs[1]: show_assessment_form()
@@ -577,9 +640,9 @@ with st.sidebar:
     if s:
         st.write("**Mã HS:**", s["student_code"])
         st.caption("Giai đoạn hiện tại: " + s["status"])
-    st.caption("🟢 Chế độ: " + ("AI Gemini có cấu hình" if ai_is_enabled() else "Gợi ý giáo viên"))
+    st.caption("🟢 Chế độ: " + ("Gemini đã cấu hình (cần bật trong lượt học)" if ai_is_enabled() else "Câu hỏi thích ứng dự phòng – chưa bật Gemini"))
     st.caption("Không đăng nhập bằng họ tên thật")
-    st.caption("Phiên bản 2.0 · 11/2026")
+    st.caption("Phiên bản 2.1 · 11/2026")
 
 if selected == "Trang chủ": home()
 elif selected == "Học với chatbot": start_or_continue()
