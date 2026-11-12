@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from math_tasks import TASKS
-from tutor_engine import feedback_on_attempt, generate_hint, secret_value, is_substantive_attempt
+from tutor_engine import feedback_on_attempt, generate_hint, secret_value, is_substantive_attempt, chat_response, ai_is_enabled
 from storage import (all_assessments, all_sessions, assessment_summary,
                      save_assessment, to_csv_bytes, upsert_session)
 
@@ -24,20 +24,48 @@ st.set_page_config(
 )
 st.markdown("""
 <style>
-    .block-container{padding-top:1.5rem;padding-bottom:2rem;max-width:1120px}
-    [data-testid="stSidebar"] {background:linear-gradient(180deg,#edf4ff,#f6f9ff)}
-    h1,h2,h3 {letter-spacing:-.025em;color:#142a50}
-    .hero {background:linear-gradient(110deg,#0e3472,#1769d1);color:#fff;
-           border-radius:18px;padding:26px 30px;margin:4px 0 18px}
-    .hero h1{color:#fff;font-size:2rem;margin:0 0 7px}
-    .hero p{color:#eaf3ff;font-size:1rem;margin:0}
-    .muted {color:#586d8c;font-size:.94rem}
-    .task {background:#fff;border:1px solid #cddcf2;border-left:5px solid #1769d1;
-           border-radius:12px;padding:16px 20px;margin:12px 0 20px;font-size:1.08rem}
-    .stage {display:inline-block;background:#e6f0ff;color:#164b91;padding:5px 10px;
-            border-radius:8px;font-weight:700;margin:4px 6px 4px 0}
-    .notice {border:1px solid #cbd9eb;padding:12px 16px;border-radius:10px;background:#f9fbff}
-    .foot {font-size:.83rem;color:#65758c;margin-top:24px}
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
+:root{--ink:#19345c;--muted:#67819c;--blue:#1558c0;--cyan:#12a5b5;--purple:#7561cd;--soft:#f6f9ff}
+html,body,[class*="css"],.stApp{font-family:'Be Vietnam Pro',system-ui,-apple-system,sans-serif!important}
+.stApp{background:linear-gradient(135deg,#f8fbff 0%,#fff 54%,#f7fcfc 100%);color:#21344e}
+.block-container{max-width:1200px;padding-top:1.45rem;padding-bottom:3rem}
+[data-testid="stSidebar"]{background:linear-gradient(175deg,#e9f3ff 0%,#f1f8ff 70%,#effaf8 100%);border-right:1px solid #dce8f5}
+[data-testid="stSidebar"] h1,[data-testid="stSidebar"] h2{color:#11396f}
+[data-testid="stSidebar"] label{font-weight:600}
+h1,h2,h3{letter-spacing:-.03em;color:#12396b}
+.stButton>button[kind="primary"],.stFormSubmitButton>button[kind="primary"]{background:linear-gradient(110deg,#1363d6,#119db4)!important;border:0!important;color:#fff!important;box-shadow:0 8px 18px rgba(20,90,180,.17);border-radius:12px!important;font-weight:700}
+.stButton>button,.stDownloadButton>button,.stFormSubmitButton>button{border-radius:12px!important;min-height:2.6rem;transition:transform .15s ease,box-shadow .15s ease}
+.stButton>button:hover,.stDownloadButton>button:hover{transform:translateY(-1px);box-shadow:0 7px 16px rgba(30,80,145,.10)}
+[data-testid="stTextArea"] textarea,[data-testid="stTextInput"] input{border-radius:12px!important;border-color:#cfddec!important}
+[data-testid="stVerticalBlockBorderWrapper"]{border-radius:18px!important;background:#fff}
+[data-testid="stChatMessage"]{border-radius:15px;padding:10px 14px;margin:8px 0;border:1px solid #e3eaf7}
+[data-testid="stProgress"]{margin-top:12px}
+.hero{position:relative;overflow:hidden;border-radius:24px;padding:32px 36px;margin:0 0 20px;
+background:radial-gradient(circle at 86% 18%,rgba(114,231,224,.24) 0,transparent 30%),linear-gradient(115deg,#113775,#155ec8 63%,#1595ae);color:#fff;box-shadow:0 14px 30px rgba(16,76,153,.16)}
+.hero:after{content:'∑  π  √  x²';position:absolute;right:15px;bottom:-30px;color:#d5fbff;opacity:.16;transform:rotate(-13deg);font-size:72px;letter-spacing:12px;white-space:nowrap}
+.hero h1{color:white;font-size:clamp(1.65rem,3.6vw,2.5rem);font-weight:800;margin:7px 0 9px;letter-spacing:-.035em}
+.hero p{color:#eefaff;font-size:clamp(.85rem,1.2vw,1.02rem);line-height:1.75;margin:0}
+.eyebrow{display:inline-block;background:rgba(255,255,255,.18);color:white;border:1px solid rgba(255,255,255,.24);padding:6px 11px;border-radius:100px;font-size:.78rem;font-weight:700}
+.phase-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0 28px}
+.phase-card{min-width:0;min-height:118px;border-radius:17px;padding:17px 14px;background:white;border:1px solid #e2ebf7;box-shadow:0 5px 16px rgba(49,95,163,.05)}
+.phase-card .tag{display:block;font-weight:800;letter-spacing:.05em;font-size:.71rem;color:#506c96;margin-bottom:7px}
+.phase-card .title{color:#173963;font-size:1rem;font-weight:800;line-height:1.5}
+.phase-card .desc{font-size:.78rem;color:#687f9c;line-height:1.55;margin-top:5px}
+.task{background:#fff;border:1px solid #cfdff2;border-left:5px solid #159eb6;border-radius:16px;padding:20px 23px;margin:12px 0 20px;font-size:1.06rem;line-height:1.85;box-shadow:0 4px 14px rgba(35,90,145,.05)}
+.notice{padding:14px 17px;background:#f3f8ff;border-radius:14px;border:1px solid #d6e4f6}
+.stage-tag{display:inline-block;padding:6px 12px;border-radius:9px;color:#13539c;background:#e5f2ff;font-size:.78rem;font-weight:800;margin-right:8px}
+.stage-title{font-size:1.3rem;font-weight:800;color:#163c70;line-height:1.4}
+.stage-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 22px}
+.stage-step{padding:10px 6px;text-align:center;border-radius:10px;color:#68819a;background:#edf4fa;font-size:.76rem;font-weight:700;line-height:1.45}
+.stage-step.done{background:#e5f8f4;color:#0d8378}
+.stage-step.active{background:#155fbe;color:#fff;box-shadow:0 5px 13px rgba(20,83,170,.16)}
+.section-kicker{font-size:.85rem;color:#527194;text-transform:uppercase;letter-spacing:.06em;font-weight:800}
+.lesson-card{padding:5px 2px 6px}
+.lesson-title{font-weight:800;font-size:1.07rem;color:#15396a;min-height:3.1em}
+.lesson-meta{color:#7188a0;font-size:.84rem}
+.foot{font-size:.8rem;color:#7a8ea3;text-align:center;margin-top:45px;padding:14px;border-top:1px solid #edf1f7}
+@media(max-width:740px){.block-container{padding:1.0rem .75rem 2rem}.hero{padding:24px 20px;border-radius:20px}.hero:after{font-size:38px;right:5px;bottom:-10px}.phase-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.phase-card{padding:12px;min-height:111px}.stage-steps{grid-template-columns:repeat(2,1fr)}.task{padding:14px 17px;font-size:1rem}}
+@media(prefers-reduced-motion:reduce){.stButton>button{transition:none!important}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -80,35 +108,48 @@ def task_box(task_text):
 
 
 def stage_header(stage_id, title, subtitle=""):
-    st.markdown(f'<span class="stage">{stage_id}</span> **{title}**')
+    st.markdown(f'<span class="stage-tag">{html.escape(stage_id)}</span><span class="stage-title">{html.escape(title)}</span>', unsafe_allow_html=True)
     if subtitle:
         st.caption(subtitle)
 
 
+def stage_navigation(status):
+    names = [("S0", "Tự tư duy"), ("S1", "Gợi mở"), ("S2", "Phản biện"), ("S3", "Vận dụng")]
+    order = ["S0", "S1", "S2", "S3", "Hoàn tất"]
+    index = order.index(status) if status in order else 0
+    items = []
+    for i, (key, label) in enumerate(names):
+        css = "active" if i == index else "done" if i < index else ""
+        items.append(f'<div class="stage-step {css}">{key} · {label}</div>')
+    st.markdown('<div class="stage-steps">' + ''.join(items) + '</div>', unsafe_allow_html=True)
+
+
 def home():
-    st.markdown('''<div class="hero"><h1>📘 TRỢ LÝ GỢI MỞ TOÁN 9</h1>
-        <p>Tự tư duy trước · Gợi ý đúng mức · Tự kiểm chứng · Vận dụng độc lập</p></div>''',
-        unsafe_allow_html=True)
-    st.write("Ứng dụng phục vụ **biện pháp phát triển năng lực tự học và giải quyết vấn đề toán học** cho học sinh lớp 9. Cơ chế tổ chức học tập được thiết kế theo bốn sản phẩm S0–S3.")
-    cols = st.columns(4)
-    for col, tag, title, desc in zip(cols,
-        ["S0", "S1", "S2", "S3"],
-        ["Tự tư duy", "Gợi mở", "Phản biện", "Tự vận dụng"],
-        ["Ghi hướng giải", "Tối đa 3 mức", "Kiểm tra lập luận", "Bài mới không AI"]):
-        with col:
-            st.metric(label=f"{tag} · {title}", value=desc)
-    st.subheader("Chọn chủ đề học tập")
-    a, b = st.columns(2)
+    st.markdown("""<div class="hero"><span class="eyebrow">✦ HỌC TOÁN THEO CÁCH CỦA EM</span>
+        <h1>📘 TRỢ LÝ GỢI MỞ TOÁN 9</h1>
+        <p>Em tự tìm hướng giải · Trợ lý hỏi đúng chỗ vướng · Em kiểm chứng và tự giải bài mới.</p></div>""", unsafe_allow_html=True)
+    tiles = [
+        ("S0", "🧠 Tự tư duy", "Viết ý tưởng của riêng em"),
+        ("S1", "💬 Gợi mở", "Tối đa ba mức hỗ trợ"),
+        ("S2", "🔎 Phản biện", "Kiểm tra từng lập luận"),
+        ("S3", "🚀 Vận dụng", "Tự làm bài toán mới"),
+    ]
+    st.markdown('<div class="phase-grid">' + ''.join(
+        f'<div class="phase-card"><span class="tag">{tag}</span><div class="title">{title}</div><div class="desc">{desc}</div></div>'
+        for tag, title, desc in tiles) + '</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-kicker">CHỌN BÀI HỌC • TOÁN 9 KẾT NỐI TRI THỨC</div>', unsafe_allow_html=True)
+    st.subheader('Hôm nay em muốn khám phá chủ đề nào?')
+    icons = {"circles":"◉", "radicals":"√", "quadratic":"x²", "system":"∑"}
+    cols = st.columns(2)
     for i, (tid, task) in enumerate(TASKS.items()):
-        with (a if i % 2 == 0 else b):
+        with cols[i % 2]:
             with st.container(border=True):
-                st.write(f"**{task['title']}**")
-                st.caption(f"{task['topic']} · {task['duration']}")
-                if st.button("Học chủ đề này", key=f"home_{tid}", use_container_width=True):
-                    st.session_state["pref_task"] = tid
-                    st.session_state.screen = "Học với chatbot"
+                st.markdown(f'<div class="lesson-card"><div class="lesson-title">{icons.get(tid,"✦")} {html.escape(task["title"])}</div><div class="lesson-meta">{html.escape(task["topic"])} · {html.escape(task["duration"])}</div></div>',unsafe_allow_html=True)
+                if st.button('Bắt đầu học  →', key=f'home_{tid}', type='primary', use_container_width=True):
+                    st.session_state['pref_task'] = tid
+                    st.session_state.screen = 'Học với chatbot'
                     st.rerun()
-    st.info("Đây là **ứng dụng thử nghiệm**. Gợi ý từ ngân hàng giáo viên hoạt động không cần khóa API. Chế độ Gemini chỉ bật khi người quản trị cấu hình riêng. Không nhập tên thật, số điện thoại hay thông tin nhạy cảm của học sinh.")
+    st.info('**Phiên bản 2.0 – thử nghiệm.** Khi chưa bật Gemini, ứng dụng dùng câu hỏi giáo viên biên soạn. Khi bật Gemini, trợ lý có thể đặt câu hỏi linh hoạt hơn theo bài làm, nhưng có thể sai và phải được giáo viên giám sát. Không nhập dữ liệu cá nhân.')
 
 
 def start_or_continue():
@@ -129,7 +170,8 @@ def start_or_continue():
                 st.rerun()
         stages = ["S0", "S1", "S2", "S3", "Hoàn tất"]
         curr = stages.index(s["status"]) if s["status"] in stages else 0
-        st.progress(curr / 4, text=f"Tiến trình: {s['status']}")
+        st.progress(curr / 4, text=f"Tiến trình của em: {s['status']}")
+        stage_navigation(s['status'])
         if s["status"] == "S0": stage_s0(s, task)
         elif s["status"] == "S1": stage_s1(s, task)
         elif s["status"] == "S2": stage_s2(s, task)
@@ -195,65 +237,89 @@ def stage_s0(s, task):
 
 
 def stage_s1(s, task):
-    stage_header("S1", "Gợi mở có kiểm soát", "Em có thể không cần gợi ý. Nếu nhận gợi ý, hãy thử một bước trước khi xem mức tiếp theo.")
-    with st.expander("Xem nhiệm vụ gốc và phần S0 của em", expanded=False):
+    stage_header("S1", "Trò chuyện cùng trợ lý gợi mở",
+                 "Trợ lý không đưa đáp án. Em hãy chia sẻ bước làm, nhận câu hỏi hỗ trợ và thử tự điều chỉnh.")
+    with st.expander("📖 Xem lại bài toán và suy nghĩ ban đầu"):
         st.write(task["s0"])
-        st.code(s["s0"], language="text")
-    cols = st.columns([2, 1])
+        st.write("**Bài làm S0 của em:**", s["s0"])
+
+    highest = s["highest_hint"]
+    ai_on = bool(s.get("ai_enabled")) and ai_is_enabled()
+    status_cols = st.columns([1.2, 2, 1.8])
+    with status_cols[0]:
+        st.metric("Mức gợi ý", f"{highest}/3")
+    with status_cols[1]:
+        st.caption("Chế độ hỗ trợ")
+        st.markdown("🤖 **AI Gemini + câu hỏi dự phòng**" if ai_on else "📘 **Ngân hàng câu hỏi giáo viên**")
+    with status_cols[2]:
+        st.caption("Quyền tự lựa chọn")
+        st.markdown("**Không cần gợi ý → sang S2**")
+
+    if s["highest_hint"] >= 3:
+        st.info("Em đã nhận tối đa ba mức gợi ý. Hãy viết cách làm của mình và chuyển sang S2 khi sẵn sàng.")
+    elif st.session_state.awaiting_attempt:
+        st.warning("📝 Sau gợi ý vừa nhận, em hãy viết một bước suy nghĩ của riêng mình trong khung hội thoại để mở mức tiếp theo.")
+    cols = st.columns([1.2, 1.0])
     with cols[0]:
-        st.subheader("💬 Cuộc trao đổi")
-        if not st.session_state.messages:
-            st.info("Nếu em đang vướng, hãy chọn 'Nhận gợi ý' ở bên phải. Hệ thống sẽ hỏi gợi mở chứ không đưa ngay lời giải.")
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-        prompt = st.chat_input("Em hãy viết bước đã thử, ý kiến phản biện hoặc điều chưa hiểu...")
-        if prompt:
-            prompt = prompt.strip()[:1200]
-            if prompt:
-                s["attempts"].append({"time": now(), "text": prompt})
-                st.session_state.messages.append({"role": "user", "content": prompt})
-                reply = feedback_on_attempt(prompt)
-                st.session_state.messages.append({"role": "assistant", "content": reply})
-                if is_substantive_attempt(prompt):
-                    st.session_state.awaiting_attempt = False
-                st.session_state.last_attempt = prompt
-                save_current()
-                st.rerun()
+        next_level = highest + 1
+        if st.button(f"✨ Nhận gợi ý mức {next_level}" if highest < 3 else "Đã đủ 3 mức gợi ý",
+                     type="primary", use_container_width=True,
+                     disabled=(highest >= 3 or st.session_state.awaiting_attempt)):
+            task_for_engine = dict(task, id=s["task_id"])
+            with st.spinner("Đang tìm câu hỏi đúng chỗ em vướng...") if ai_on else st.empty():
+                hint, src, error_type = generate_hint(
+                    task_for_engine, next_level,
+                    st.session_state.last_attempt or s["s0"], use_ai=ai_on
+                )
+            s["highest_hint"] = next_level
+            s["hints"].append({"level": next_level, "text": hint, "source": src,
+                               "error_hint": error_type, "time": now()})
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": f"**🧭 Gợi ý mức {next_level}:** {hint}\n\n_{src}_"
+            })
+            st.session_state.awaiting_attempt = True
+            save_current()
+            st.rerun()
     with cols[1]:
-        st.subheader("🧭 Mức hỗ trợ")
-        st.metric("Mức cao nhất", f"{s['highest_hint']}/3")
-        ai_on = bool(s.get("ai_enabled")) and bool(secret_value("GEMINI_API_KEY")) and secret_value("ENABLE_GEMINI_FOR_STUDENTS").lower() in ("true", "1", "yes")
-        st.caption("Chế độ: " + ("AI Gemini + gợi ý kiểm duyệt dự phòng" if ai_on else "Gợi ý giáo viên biên soạn"))
-        if s["highest_hint"] >= 3:
-            st.info("Đã đủ ba mức gợi ý. Em hãy tự tổng hợp để sang S2.")
-        elif st.session_state.awaiting_attempt:
-            st.warning("Em hãy viết một bước suy nghĩ sau gợi ý vừa nhận để được mở mức tiếp theo.")
-        else:
-            next_level = s["highest_hint"] + 1
-            if st.button(f"Nhận gợi ý mức {next_level}", type="primary", use_container_width=True):
-                if not s["s0"].strip():
-                    st.error("Em cần nộp S0 trước khi xem gợi ý.")
-                else:
-                    task_for_engine = dict(task, id=s["task_id"])
-                    hint, src, error_type = generate_hint(
-                        task_for_engine, next_level,
-                        st.session_state.last_attempt or s["s0"], use_ai=ai_on
-                    )
-                    s["highest_hint"] = next_level
-                    s["hints"].append({"level": next_level, "text": hint, "source": src,
-                                       "error_hint": error_type, "time": now()})
-                    st.session_state.messages.append({"role": "assistant", "content": f"**Gợi ý {next_level}:** {hint}\n\n*{src}*"})
-                    st.session_state.awaiting_attempt = True
-                    save_current()
-                    st.rerun()
-        st.divider()
-        st.write("**Sẵn sàng kiểm chứng?**")
-        if st.button("Chuyển sang S2", use_container_width=True):
+        if st.button("Tiếp tục sang S2 →", use_container_width=True):
             s["status"] = "S2"
             save_current()
             st.rerun()
-        st.caption("Học sinh làm đúng từ S0 có thể bỏ qua tất cả mức gợi ý.")
+
+    st.markdown("### 💬 Cuộc trao đổi")
+    if not st.session_state.messages:
+        st.info("Em có thể bấm nhận gợi ý hoặc viết một ý tưởng mới để trợ lý hỏi lại theo suy nghĩ của em.")
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"], avatar="🧑‍🎓" if message["role"] == "user" else "🤖"):
+            st.markdown(message["content"])
+    st.caption("Ví dụ: ‘Em nghĩ hai đường tròn cắt nhau vì d < R + r’, hoặc ‘Em chưa biết điều kiện nào còn thiếu’. Không cần viết quá dài.")
+    prompt = st.chat_input("Nhắn bước em đã thử hoặc điều chưa hiểu...")
+    if prompt:
+        prompt = prompt.strip()[:1200]
+        if prompt:
+            s["attempts"].append({"time": now(), "text": prompt})
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            task_for_engine = dict(task, id=s["task_id"])
+            with st.spinner("Trợ lý đang đọc suy nghĩ của em...") if ai_on else st.empty():
+                reply, source = chat_response(task_for_engine, prompt, use_ai=ai_on,
+                                              level=max(1, s["highest_hint"]))
+            st.session_state.messages.append({"role": "assistant", "content": reply + "\n\n_" + source + "_"})
+            # Trợ lý đối thoại theo lời học sinh cũng là một hình thức gợi ý.
+            # Nếu trước đó chưa mở gợi ý, gán mức 1 để nhật ký không đánh giá thiếu hỗ trợ.
+            given_hint = is_substantive_attempt(prompt)
+            if given_hint and s["highest_hint"] == 0:
+                s["highest_hint"] = 1
+                s["hints"].append({"level": 1, "text": reply, "source": source,
+                                   "error_hint": "qua_hội_thoại", "time": now()})
+                st.session_state.awaiting_attempt = True
+            elif given_hint:
+                s["hints"].append({"level": s["highest_hint"], "text": reply, "source": source,
+                                   "error_hint": "qua_hội_thoại", "time": now()})
+                st.session_state.awaiting_attempt = False
+            st.session_state.last_attempt = prompt
+            save_current()
+            st.rerun()
 
 
 def stage_s2(s, task):
@@ -295,6 +361,9 @@ def stage_s3(s, task):
 
 
 def stage_complete(s, task):
+    if st.session_state.get('celebrated_session') != s['session_id']:
+        st.session_state['celebrated_session'] = s['session_id']
+        st.balloons()
     st.success("🎉 Đã hoàn thành lượt học S0–S3. Bài S3 được lưu để giáo viên xem xét; đây không phải điểm chấm tự động.")
     st.metric("Mức gợi ý cao nhất", s["highest_hint"])
     with st.expander("Xem lại chuỗi minh chứng S0–S3", expanded=True):
@@ -508,8 +577,9 @@ with st.sidebar:
     if s:
         st.write("**Mã HS:**", s["student_code"])
         st.caption("Giai đoạn hiện tại: " + s["status"])
-    st.caption("Không cần đăng nhập bằng tên thật")
-    st.caption("Phiên bản 1.0 · 11/2026")
+    st.caption("🟢 Chế độ: " + ("AI Gemini có cấu hình" if ai_is_enabled() else "Gợi ý giáo viên"))
+    st.caption("Không đăng nhập bằng họ tên thật")
+    st.caption("Phiên bản 2.0 · 11/2026")
 
 if selected == "Trang chủ": home()
 elif selected == "Học với chatbot": start_or_continue()
@@ -517,4 +587,4 @@ elif selected == "Nhật ký cá nhân": personal_log()
 elif selected == "Góc giáo viên": teacher_dashboard()
 else: guide()
 
-st.markdown('<div class="foot">© Trợ lý gợi mở Toán 9 · Bản thử nghiệm sư phạm. Nội dung và đáp án cần giáo viên kiểm duyệt trước khi áp dụng tại lớp.</div>', unsafe_allow_html=True)
+st.markdown('<div class="foot">TRỢ LÝ GỢI MỞ TOÁN 9 • HỌC SINH TỰ TƯ DUY, GIÁO VIÊN GIỮ VAI TRÒ CHỦ ĐẠO<br/>Bản thử nghiệm sư phạm · Nội dung cần được giáo viên kiểm duyệt trước khi sử dụng chính thức.</div>', unsafe_allow_html=True)
