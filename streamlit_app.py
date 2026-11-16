@@ -4,6 +4,7 @@ Giai đoạn: bản thử nghiệm sư phạm, không chấm điểm trước–
 from __future__ import annotations
 
 import hmac
+import hashlib
 import html
 import json
 import re
@@ -16,6 +17,7 @@ import streamlit as st
 from math_tasks import TASKS
 from circle_curriculum import TOPIC_NAME, LESSONS, EXERCISES, guess_lesson, lesson_exercises
 from circle_tutor import ask_tutor, next_self_practice
+from image_reader import read_math_image, ImageReadingError, MAX_IMAGE_BYTES
 from tutor_engine import feedback_on_attempt, generate_hint, secret_value, is_substantive_attempt, chat_response, ai_is_enabled, review_reasoning, gemini_connection_test
 from storage import (all_assessments, all_sessions, assessment_summary,
                      save_assessment, to_csv_bytes, upsert_session)
@@ -167,7 +169,7 @@ def home():
                     st.session_state['pref_task'] = tid
                     st.session_state.screen = 'Luyện bài mẫu S0–S3'
                     st.rerun()
-    st.info('**Phiên bản 3.0 – thử nghiệm (Chương V).** Khi chưa bật Gemini, ứng dụng dùng câu hỏi giáo viên biên soạn. Khi bật Gemini, trợ lý có thể đặt câu hỏi linh hoạt hơn theo bài làm, nhưng có thể sai và phải được giáo viên giám sát. Không nhập dữ liệu cá nhân.')
+    st.info('**Phiên bản 4.1 – thử nghiệm (Chương V, có đọc ảnh).** Khi chưa bật Gemini, ứng dụng dùng câu hỏi giáo viên biên soạn. Khi bật Gemini, trợ lý có thể đặt câu hỏi linh hoạt hơn theo bài làm, nhưng có thể sai và phải được giáo viên giám sát. Không nhập dữ liệu cá nhân.')
 
 
 def start_or_continue():
@@ -652,7 +654,7 @@ def teacher_dashboard():
 
 def circle_topic_tutor():
     """Gia sư hội thoại theo tiến trình; cho nhập đề bất kỳ trong toàn chương, giữ mạch S0–S3 ở nền."""
-    st.markdown('<div class="topic-hero"><span>TRỢ LÝ GỢI MỞ TOÁN 9 · GIA SƯ 4.0</span><h2>💬 Hỏi gia sư chủ đề Đường tròn</h2><p>Em cứ nói điều đang vướng. Trợ lý sẽ nhớ những gì em đã thử, hỏi một bước vừa sức và cùng em tự tìm lời giải.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="topic-hero"><span>TRỢ LÝ GỢI MỞ TOÁN 9 · GIA SƯ 4.1 · NHẬN ĐỀ TỪ ẢNH</span><h2>💬 Hỏi gia sư chủ đề Đường tròn</h2><p>Em cứ nói điều đang vướng. Trợ lý sẽ nhớ những gì em đã thử, hỏi một bước vừa sức và cùng em tự tìm lời giải.</p></div>', unsafe_allow_html=True)
     if "circle_chat" not in st.session_state:
         st.session_state.circle_chat = None
     ss = st.session_state.circle_chat
@@ -665,7 +667,10 @@ def circle_topic_tutor():
             mode = st.selectbox("Bài học", ["auto"] + list(LESSONS),
                 format_func=lambda x: "Tự nhận diện trong Chương V" if x == "auto" else LESSONS[x]["title"],
                 key="topic_lesson_choice")
-        choose = st.radio("Cách nhập bài", ["Nhập đề bài của em", "Chọn bài trong ngân hàng"], horizontal=True, key="topic_input_mode")
+        choose = st.radio(
+            "Cách gửi đề toán",
+            ["Nhập đề bằng chữ", "📷 Tải ảnh đề toán", "📸 Chụp ảnh đề toán", "Chọn bài trong ngân hàng"],
+            horizontal=True, key="topic_input_mode")
         chosen = None
         if choose == "Chọn bài trong ngân hàng":
             pool = EXERCISES if mode == "auto" else lesson_exercises(mode)
@@ -674,11 +679,75 @@ def circle_topic_tutor():
             chosen = options[eid]
             problem = chosen["problem"]
             st.info(problem)
-        else:
+        elif choose == "Nhập đề bằng chữ":
             problem = st.text_area("Nhập nguyên văn đề toán em chưa biết làm", height=145,
                 placeholder="Ví dụ: Cho hai đường tròn (O; 5 cm) và (O'; 3 cm), OO' = 2 cm. Hai đường tròn có mấy điểm chung? Vì sao?",
                 key="topic_problem")
-            st.caption("Bản 3.0 hỗ trợ nhập đề dạng chữ. Hình vẽ/ảnh đề bài sẽ được phát triển và kiểm thử riêng.")
+        else:
+            st.markdown("#### 📷 Gửi ảnh đề toán")
+            st.caption("Ảnh rõ nét, đủ cả đề và hình vẽ; che tên, lớp, trường và thông tin cá nhân. Hỗ trợ JPG, PNG, WebP; tối đa 8 MB.")
+            if choose == "📷 Tải ảnh đề toán":
+                photo = st.file_uploader("Chọn ảnh trong máy hoặc điện thoại", type=["jpg", "jpeg", "png", "webp"],
+                                         accept_multiple_files=False, key="circle_image_file")
+            else:
+                photo = st.camera_input("Chụp ảnh đề toán bằng camera", key="circle_image_camera")
+            problem = ""
+            if photo is not None:
+                data = photo.getvalue()
+                fingerprint = hashlib.sha256(data).hexdigest()
+                if st.session_state.get("circle_vision_fingerprint") != fingerprint:
+                    # Đổi ảnh: bỏ bản nhận dạng cũ và bắt buộc người dùng đọc/kiểm tra lại.
+                    for item in ("circle_vision_draft", "circle_vision_verified_text", "circle_vision_verified_diagram", "circle_vision_verified"):
+                        st.session_state.pop(item, None)
+                    st.session_state["circle_vision_fingerprint"] = fingerprint
+                st.image(data, caption="Ảnh đề vừa chọn — kiểm tra đề và hình có rõ hay chưa", use_container_width=True)
+                if len(data) > MAX_IMAGE_BYTES:
+                    st.error("Ảnh lớn hơn 8 MB. Hãy cắt ảnh hoặc chụp lại.")
+                else:
+                    st.info("Khi bấm **Đọc đề từ ảnh**, ảnh sẽ gửi đến Gemini để nhận dạng. Sau đó em PHẢI đọc lại, sửa những chỗ AI đọc nhầm trước khi học.")
+                    permitted = st.checkbox(
+                        "Ảnh đã che thông tin cá nhân; em đồng ý gửi ảnh đề đến Gemini để đọc nội dung.",
+                        key="circle_image_read_consent")
+                    if not ai_is_enabled():
+                        st.warning("Gemini chưa sẵn sàng nên chưa thể đọc ảnh tự động. Em có thể chuyển sang Nhập đề bằng chữ.")
+                    elif st.button("🔎 Đọc đề từ ảnh bằng Gemini", key="circle_read_image_btn", type="primary", disabled=not permitted):
+                        with st.spinner("Đang đọc đề, công thức và hình vẽ (chưa giải toán)…"):
+                            try:
+                                parsed = read_math_image(data, secret_value("GEMINI_API_KEY"),
+                                                         secret_value("GEMINI_MODEL") or "gemini-2.5-flash")
+                            except ImageReadingError as err:
+                                st.error(str(err))
+                            else:
+                                # Không giữ ảnh trong nhật ký. Chỉ lưu bản chép để học sinh kiểm tra.
+                                st.session_state["circle_vision_draft"] = parsed
+                                st.session_state["circle_vision_verified_text"] = parsed["problem_text"]
+                                st.session_state["circle_vision_verified_diagram"] = parsed.get("diagram_description", "")
+                                st.session_state["circle_vision_verified"] = False
+                                st.rerun()
+            if photo is None:
+                for item in ("circle_vision_draft", "circle_vision_fingerprint", "circle_vision_verified_text", "circle_vision_verified_diagram", "circle_vision_verified"):
+                    st.session_state.pop(item, None)
+            saved = st.session_state.get("circle_vision_draft")
+            if saved:
+                st.success("Đã nhận dạng sơ bộ. **Em cần đối chiếu với ảnh gốc và sửa chỗ đọc sai.**")
+                st.caption("Lượt gia sư sẽ dùng bản đề được em xác nhận, không dùng ảnh gốc; hệ thống không lưu ảnh vào nhật ký.")
+                st.caption("Gemini có thể đọc sai chỉ số, dấu căn, góc, tiếp tuyến hoặc nhãn hình vẽ.")
+                problem = st.text_area("✍️ Đề bài đã nhận dạng — em đọc lại và sửa cho đúng", value=saved["problem_text"],
+                                       height=180, key="circle_vision_verified_text")
+                diagram = st.text_area("🧭 Mô tả hình vẽ (nếu có) — em kiểm tra và bổ sung", value=saved.get("diagram_description", ""),
+                                       height=100, key="circle_vision_verified_diagram")
+                if saved.get("uncertain_details"):
+                    st.warning("**Những chỗ AI chưa chắc:** " + "; ".join(saved["uncertain_details"]))
+                problem = problem.strip()
+                if diagram.strip():
+                    problem += "\n[Mô tả hình vẽ đã được học sinh đối chiếu: " + diagram.strip()[:1500] + "]"
+                if len(problem) > 4500:
+                    st.warning("Đề hơi dài; bạn hãy chỉ giữ một bài toán và hình vẽ liên quan.")
+                verified = st.checkbox("Em xác nhận đã đối chiếu toàn bộ đề, số liệu và hình với ảnh gốc.",
+                                       key="circle_vision_verified")
+            else:
+                st.info("Hãy tải/chụp ảnh rồi nhấn **Đọc đề từ ảnh bằng Gemini**. Nếu không đọc được, em có thể chọn Nhập đề bằng chữ.")
+                verified = False
         allow_ai = ai_is_enabled()
         use_ai = st.checkbox("🤖 Thử gia sư AI Gemini (hội thoại thích ứng)", value=False, disabled=not allow_ai,
                              help="Khi bật, đề, tin nhắn và lịch sử gần đây (đã giảm thông tin cá nhân) được gửi cho Google Gemini. Chỉ dùng dữ liệu thử nghiệm đã được phép.")
@@ -688,6 +757,8 @@ def circle_topic_tutor():
         if st.button("🚀 Bắt đầu trao đổi với gia sư", type="primary", use_container_width=True):
             if not re.fullmatch(r"[A-Za-z0-9_-]{3,10}", code.strip()):
                 st.error("Mã học sinh gồm 3–10 ký tự, chỉ chữ, số, dấu gạch dưới hoặc gạch ngang.")
+            elif choose in ("📷 Tải ảnh đề toán", "📸 Chụp ảnh đề toán") and not verified:
+                st.warning("Em cần xác nhận đã đọc và sửa đúng đề/hình trước khi bắt đầu. Nếu AI nhận sai, hãy sửa nội dung trong hai ô phía trên.")
             elif len(problem.strip()) < 15:
                 st.warning("Em nhập đề bài đầy đủ hơn một chút nhé.")
             else:
@@ -695,6 +766,7 @@ def circle_topic_tutor():
                 st.session_state.circle_chat = {
                     "id": str(uuid.uuid4()), "student_code": code.strip().upper(), "problem": problem.strip()[:2500],
                     "selected_lesson": lid, "chosen_exercise": chosen,
+                    "problem_from_image": bool(choose in ("📷 Tải ảnh đề toán", "📸 Chụp ảnh đề toán")),
                     "messages": [{"role":"assistant", "text":"Mình đã nhận đề của em. Trước khi gợi ý, em đã thử cách nào? Em có thể viết một bước, kể cả khi chưa đúng nhé.", "source":"Khởi động S0"}],
                     "phase": "S0", "turns": 0, "highest_hint":None, "s0":"", "s2":"", "s3_problem":"", "s3_answer":"", "use_ai": bool(use_ai and allow_ai),
                     "started_at":now(), "answered_practice_id":None, "learner_model":{}, "style":"Gợi mở vừa sức", "last_source":"Khởi động S0", "support_log":[],
@@ -834,7 +906,7 @@ def circle_topic_tutor():
         st.success("Em đã nộp bài độc lập. Giáo viên sẽ kiểm tra và nhận xét; trợ lý không tự cho điểm.")
     export = {"name":"TRỢ LÝ GỢI MỞ TOÁN 9", "topic":TOPIC_NAME,
               "student_code":ss["student_code"], "session_id":ss["id"], "started_at":ss["started_at"],
-              "lesson":title,"problem":ss["problem"],"s0":ss["s0"],"conversation":ss["messages"],
+              "lesson":title,"problem":ss["problem"],"problem_from_image":ss.get("problem_from_image",False),"s0":ss["s0"],"conversation":ss["messages"],
               "s2":ss.get("s2",""),"s3_problem":ss["s3_problem"],"s3_answer":ss["s3_answer"],
               "highest_hint_level":ss["highest_hint"], "number_of_tutor_questions":ss["turns"], "learner_model_tentative":ss.get("learner_model", {}), "support_log":ss.get("support_log",[]), "record_status":ss["phase"],
               "notes":"Dữ liệu lượt thử lưu trong phiên trình duyệt; không thay cho minh chứng có xác thực."}
@@ -905,7 +977,7 @@ with st.sidebar:
         label = "Học liệu dự phòng · chưa dùng Gemini"
     st.caption("🟢 Chế độ: " + label)
     st.caption("Không đăng nhập bằng họ tên thật")
-    st.caption("Phiên bản 4.0 · Gia sư gợi mở Chương V")
+    st.caption("Phiên bản 4.1 · Gia sư gợi mở Chương V")
 
 if selected == "Trang chủ": home()
 elif selected == "Gia sư Đường tròn": circle_topic_tutor()
