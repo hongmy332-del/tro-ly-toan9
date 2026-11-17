@@ -24,7 +24,7 @@ from storage import (all_assessments, all_sessions, assessment_summary,
 
 st.set_page_config(
     page_title="Trợ lý gợi mở Toán 9", page_icon="📘", layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="auto"
 )
 st.markdown("""
 <style>
@@ -32,7 +32,7 @@ st.markdown("""
 :root{--ink:#19345c;--muted:#67819c;--blue:#1558c0;--cyan:#12a5b5;--purple:#7561cd;--soft:#f6f9ff}
 html,body,[class*="css"],.stApp{font-family:'Be Vietnam Pro',system-ui,-apple-system,sans-serif!important}
 .stApp{background:linear-gradient(135deg,#f8fbff 0%,#fff 54%,#f7fcfc 100%);color:#21344e}
-.block-container{max-width:1200px;padding-top:1.45rem;padding-bottom:3rem}
+.block-container{max-width:1440px;padding-top:.85rem;padding-bottom:2rem}
 [data-testid="stSidebar"]{background:linear-gradient(175deg,#e9f3ff 0%,#f1f8ff 70%,#effaf8 100%);border-right:1px solid #dce8f5}
 [data-testid="stSidebar"] h1,[data-testid="stSidebar"] h2{color:#11396f}
 [data-testid="stSidebar"] label{font-weight:600}
@@ -90,6 +90,27 @@ background:radial-gradient(circle at 86% 18%,rgba(114,231,224,.24) 0,transparent
 /* Trong khung chat, tập trung vào cuộc trao đổi; không biến mỗi tin thành một thẻ cao */
 [data-testid="stChatMessage"]{margin:6px 0;padding:9px 11px;border-radius:12px}
 @media(max-width:740px){.tutor-pane-heading{font-size:1rem}.tutor-progress{font-size:.78rem}}
+</style>
+""", unsafe_allow_html=True)
+
+# V5.0: không gian học sinh ưu tiên hội thoại; sidebar được thu gọn thủ công.
+st.markdown("""
+<style>
+[data-testid="stSidebar"]{min-width:240px!important;max-width:260px!important}
+[data-testid="stSidebar"] [data-testid="stRadio"] label{font-size:.91rem}
+[data-testid="stAppViewContainer"] .block-container{max-width:1450px;padding-top:.65rem}
+.v5-topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 20px;margin:0 0 12px;border-radius:14px;background:linear-gradient(105deg,#173d7d,#1d70b7 75%,#159cab);color:white}
+.v5-brand{font-weight:800;letter-spacing:-.025em;font-size:1.05rem;color:#fff}
+.v5-subbrand{font-weight:500;font-size:.78rem;color:#e7f5fc;text-align:right}
+.v5-phases{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:9px 0 17px}
+.v5-phase{background:#f1f5fa;border:1px solid #e2eaf3;color:#6b829a;text-align:center;border-radius:10px;padding:10px 6px;font-size:.78rem;font-weight:700}
+.v5-phase.is-active{background:#dcefff;border-color:#8bbbe4;color:#0c4e88;box-shadow:inset 0 0 0 1px #8bbbe4}
+.v5-phase.is-done{background:#eaf8f1;border-color:#c8e6d6;color:#18805a}
+.v5-pane-label{font-weight:800;font-size:1.08rem;color:#17426c;padding:1px 0 12px}
+[data-testid="stChatMessage"]{padding:10px 12px;margin:6px 0;background:transparent;border:0;border-radius:11px}
+[data-testid="stChatMessage"] [data-testid="stChatMessageContent"] p{line-height:1.65}
+[data-testid="stChatInput"]{border-radius:13px}
+@media (max-width:850px){.v5-topbar{display:block;padding:13px 15px}.v5-subbrand{text-align:left;margin-top:3px}.v5-phases{grid-template-columns:repeat(2,minmax(0,1fr))}.v5-phase{font-size:.76rem}.v5-pane-label{font-size:1rem}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -180,7 +201,7 @@ def home():
                     st.session_state['pref_task'] = tid
                     st.session_state.screen = 'Luyện bài mẫu S0–S3'
                     st.rerun()
-    st.info('**Phiên bản 4.1 – thử nghiệm (Chương V, có đọc ảnh).** Khi chưa bật Gemini, ứng dụng dùng câu hỏi giáo viên biên soạn. Khi bật Gemini, trợ lý có thể đặt câu hỏi linh hoạt hơn theo bài làm, nhưng có thể sai và phải được giáo viên giám sát. Không nhập dữ liệu cá nhân.')
+    st.info('**Phiên bản 5.0 – giao diện học sinh tối giản (Chương V, có đọc ảnh).** Khi chưa bật Gemini, ứng dụng dùng câu hỏi giáo viên biên soạn. Khi bật Gemini, trợ lý có thể đặt câu hỏi linh hoạt hơn theo bài làm, nhưng có thể sai và phải được giáo viên giám sát. Không nhập dữ liệu cá nhân.')
 
 
 def start_or_continue():
@@ -665,12 +686,16 @@ def teacher_dashboard():
 
 def circle_topic_tutor():
     """Gia sư hội thoại theo tiến trình; cho nhập đề bất kỳ trong toàn chương, giữ mạch S0–S3 ở nền."""
-    st.markdown('<div class="topic-hero"><span>TRỢ LÝ GỢI MỞ TOÁN 9 · GIA SƯ 4.2 · HỘI THOẠI & GỢI MỞ 2 KHUNG</span><h2>💬 Hỏi gia sư chủ đề Đường tròn</h2><p>Em cứ nói điều đang vướng. Trợ lý sẽ nhớ những gì em đã thử, hỏi một bước vừa sức và cùng em tự tìm lời giải.</p></div>', unsafe_allow_html=True)
+    st.markdown('''<div class="v5-topbar">
+        <div class="v5-brand">📘 TRỢ LÝ GỢI MỞ TOÁN 9</div>
+        <div class="v5-subbrand">Gia sư Chương V · V5.0 · Học từng bước, không giải thay</div>
+        </div>''', unsafe_allow_html=True)
     if "circle_chat" not in st.session_state:
         st.session_state.circle_chat = None
     ss = st.session_state.circle_chat
     if not ss:
-        st.write("### Em muốn nhờ trợ lý hướng dẫn bài toán nào?")
+        st.subheader("Chọn đề toán để bắt đầu")
+        st.caption("Nhập đề, chụp ảnh hoặc chọn từ ngân hàng; sau đó trò chuyện cùng gia sư.")
         col1, col2 = st.columns([2, 1])
         with col1:
             code = st.text_input("Mã học sinh (không dùng tên thật)", value="HS01", key="topic_code", max_chars=6)
@@ -788,81 +813,131 @@ def circle_topic_tutor():
                 st.write(f"**{content['title']}** — {content['summary']}")
         return
 
-    # Phiên bản 4.2: hội thoại ở trái, gợi mở và công cụ ở phải.
-    if st.button("↩ Chọn bài toán khác", key="topic_reset"):
-        st.session_state.circle_chat = None
-        st.rerun()
+    # V5.0: khung chat là không gian chính; các hỗ trợ chỉ mở khi học sinh cần.
     lid = ss.get("selected_lesson")
     title = LESSONS[lid]["title"] if lid in LESSONS else "Chưa xác định chính xác mạch kiến thức"
-    st.caption(f"Mã thử: {ss['student_code']} · {title}")
-    st.markdown('<div class="topic-step-row"><span>🧠 S0 · Tự thử</span><span>💡 S1 · Gợi mở</span><span>🔍 S2 · Kiểm chứng</span><span>🚀 S3 · Vận dụng</span></div>', unsafe_allow_html=True)
+    top = st.columns([6, 1.4], gap="small", vertical_alignment="center")
+    with top[0]:
+        st.caption(f"Mã thử {ss['student_code']} · {title} · {ss.get('turns', 0)} lượt trao đổi")
+    with top[1]:
+        if st.button("↩ Đổi đề", key="topic_reset", use_container_width=True):
+            st.session_state.circle_chat = None
+            st.rerun()
+    phase_names = [("S0", "Tự thử"), ("S1", "Gợi mở"), ("S2", "Kiểm chứng"), ("S3", "Vận dụng")]
+    current = ss.get("phase", "S0")
+    pos = [x[0] for x in phase_names].index(current) if current in [x[0] for x in phase_names] else 4
+    bits = []
+    for i, (phase, name) in enumerate(phase_names):
+        css = "is-active" if i == pos else ("is-done" if i < pos else "")
+        bits.append(f'<div class="v5-phase {css}"><strong>{phase}</strong> · {name}</div>')
+    st.markdown('<div class="v5-phases">' + ''.join(bits) + '</div>', unsafe_allow_html=True)
 
-    # Hai khung độc lập giúp người học không phải cuộn qua hàng loạt nút.
-    chat_col, support_col = st.columns([1.65, 1], gap="large")
+    chat_col, support_col = st.columns([2.15, 1], gap="medium")
     incoming_from_chat = None
     quick_message = None
     with chat_col:
-        st.markdown('<div class="tutor-pane-heading">💬 Hội thoại với gia sư</div>', unsafe_allow_html=True)
-        st.markdown('<div class="tutor-pane-note">Em cứ trình bày bước đã thử hoặc điều chưa hiểu. Gia sư sẽ tiếp tục từ đúng chỗ em đang vướng.</div>', unsafe_allow_html=True)
-        if ss["phase"] not in ("S3", "Done"):
-            with st.container(height=490, border=True):
+        st.markdown('<div class="v5-pane-label">💬 Hội thoại với gia sư</div>', unsafe_allow_html=True)
+        if ss["phase"] in ("S0", "S1", "S2"):
+            with st.container(height=555, border=True):
                 for m in ss["messages"]:
                     with st.chat_message("assistant" if m["role"] == "assistant" else "user",
                                          avatar="🤖" if m["role"] == "assistant" else "🧑‍🎓"):
                         st.write(m["text"])
                         if m.get("source") and m["role"] == "assistant":
                             st.caption(m["source"])
-            incoming_from_chat = st.chat_input("Viết bước em đã làm hoặc câu hỏi của em…",
-                                                key=f"topic_chat_input_{ss['id']}")
+            if ss.get("pending_image"):
+                st.info("Ảnh đã được đọc sơ bộ. Hãy đối chiếu đề ở **Góc hỗ trợ** trước khi tiếp tục trò chuyện.")
+            incoming_from_chat = st.chat_input(
+                "Viết điều em đang vướng hoặc đính kèm ảnh đề…",
+                key=f"v5_chat_input_{ss['id']}",
+                accept_file=True, file_type=["jpg", "jpeg", "png", "webp"],
+                max_chars=1400, disabled=bool(ss.get("pending_image")),
+            )
+            st.caption("Enter để gửi · Đính kèm ảnh đề/hình vẽ (cần xác nhận bản đọc) · Không gửi thông tin cá nhân")
         elif ss["phase"] == "S3":
-            st.info("**S3 – Bài vận dụng độc lập:** Khung gia sư tạm dừng. Em tự giải, không nhận gợi ý hoặc đáp án.")
+            st.info("**S3 – Bài vận dụng độc lập:** Gia sư tạm dừng để em tự làm.")
             with st.container(border=True):
-                st.markdown("**Bài vận dụng**")
+                st.markdown("**Bài toán vận dụng**")
                 st.write(ss["s3_problem"])
-            answer = st.text_area("Trình bày bài giải của em", value=ss.get("s3_answer", ""),
-                                  key=f"tutor_s3_{ss['id']}", height=230)
+            answer = st.text_area("Trình bày cách giải của em", value=ss.get("s3_answer", ""),
+                                  key=f"tutor_s3_{ss['id']}", height=260)
             if st.button("✅ Nộp bài vận dụng", type="primary", key=f"submit_s3_{ss['id']}"):
                 if len(answer.strip()) < 15:
-                    st.warning("Em hãy trình bày thêm các bước lập luận trước khi nộp.")
+                    st.warning("Em cần viết thêm những bước lập luận trước khi nộp.")
                 else:
                     ss["s3_answer"] = answer
                     ss["phase"] = "Done"
                     st.rerun()
         else:
-            st.success("Đã nộp bài tự làm. Giáo viên sẽ xem và nhận xét; gia sư không tự chấm điểm.")
+            st.success("Em đã nộp bài tự làm. Giáo viên sẽ kiểm tra; ứng dụng không tự chấm điểm.")
 
     with support_col:
-        st.markdown('<div class="tutor-pane-heading">💡 Gợi mở & công cụ học tập</div>', unsafe_allow_html=True)
-        st.markdown('<div class="tutor-pane-note">Chỉ xem phần hỗ trợ cần thiết; bài giải vẫn do em tự thực hiện.</div>', unsafe_allow_html=True)
-        with st.expander("📄 Xem đề bài đang học", expanded=False):
+        st.markdown('<div class="v5-pane-label">💡 Góc hỗ trợ</div>', unsafe_allow_html=True)
+        with st.expander("📄 Đề bài đang học", expanded=False):
             st.write(ss["problem"])
+        if ss.get("pending_image") and ss["phase"] in ("S0", "S1", "S2"):
+            draft = ss["pending_image"]
+            st.warning("**Xác nhận ảnh trước khi dùng:** Gemini có thể đọc nhầm số và hình.")
+            with st.container(border=True):
+                corrected = st.text_area(
+                    "Đề trong ảnh (sửa nếu có chỗ sai)",
+                    value=draft.get("problem_text", ""),
+                    key=f"v5_image_review_text_{ss['id']}_{draft['token']}", height=160)
+                sketch = st.text_area(
+                    "Mô tả hình vẽ/nhãn điểm", value=draft.get("diagram_description", ""),
+                    key=f"v5_image_review_diagram_{ss['id']}_{draft['token']}", height=100)
+                if draft.get("uncertain_details"):
+                    st.caption("Chỗ cần kiểm tra: " + "; ".join(draft["uncertain_details"]))
+                how = st.radio("Dùng ảnh vào đâu?", ["Bổ sung vào đề đang học", "Bắt đầu đề mới"],
+                               key=f"v5_image_import_{ss['id']}_{draft['token']}")
+                checked = st.checkbox("Em đã đối chiếu đề và hình với ảnh gốc.",
+                                      key=f"v5_image_confirm_{ss['id']}_{draft['token']}")
+                if st.button("✅ Dùng nội dung đã xác nhận", disabled=not checked,
+                             key=f"v5_image_accept_{ss['id']}", type="primary", use_container_width=True):
+                    verified_text = corrected.strip()
+                    if len(verified_text) < 12:
+                        st.warning("Em cần ghi rõ nội dung đề đã kiểm tra.")
+                    else:
+                        if sketch.strip():
+                            verified_text += "\n[Mô tả hình đã được đối chiếu: " + sketch.strip()[:1000] + "]"
+                        if how == "Bắt đầu đề mới":
+                            ss["problem"] = verified_text[:2500]
+                            ss["selected_lesson"] = guess_lesson(ss["problem"])[0]
+                            ss["chosen_exercise"] = None
+                            ss["messages"] = [{"role":"assistant", "text":
+                                "Mình đã nhận đề mới sau khi em kiểm tra ảnh. Em hãy cho biết một dữ kiện hoặc ý tưởng đầu tiên em nhận ra nhé?",
+                                "source":"Khởi động S0 · ảnh đã xác nhận"}]
+                            ss.update({"phase":"S0", "turns":0, "highest_hint":None, "s0":"", "s2":"",
+                                       "s3_problem":"", "s3_answer":"", "learner_model":{}, "support_log":[]})
+                        else:
+                            # Chỉ nhận phần được học sinh kiểm tra, không giữ ảnh gốc trong phiên.
+                            ss["problem"] = (ss["problem"] + "\n[Dữ kiện bổ sung từ ảnh đã xác nhận: "
+                                             + verified_text[:1100] + "]")[:3500]
+                            ss["messages"].append({"role":"assistant", "text":
+                                "Mình đã bổ sung thông tin từ ảnh vào đề. Em muốn thử bước nào tiếp theo?",
+                                "source":"Ảnh đã đối chiếu"})
+                        ss["problem_from_image"] = True
+                        ss.pop("pending_image", None)
+                        st.rerun()
+                if st.button("Hủy ảnh", key=f"v5_image_cancel_{ss['id']}", use_container_width=True):
+                    ss.pop("pending_image", None)
+                    st.rerun()
         if ss["phase"] in ("S0", "S1", "S2"):
             ready_ai = ai_is_enabled()
             ss["use_ai"] = st.toggle("🤖 Gia sư Gemini", value=bool(ss.get("use_ai", False)),
                                       disabled=not ready_ai, key=f"topic_use_ai_{ss['id']}",
-                                      help="Bật chỉ cho bài thử không chứa dữ liệu cá nhân; nội dung trao đổi được gửi tới Gemini.")
+                                      help="Khi bật, đề và tin nhắn học tập có thể được gửi đến Gemini.")
             if ss["use_ai"] and ready_ai:
-                st.caption("AI đang bật · nguồn mỗi phản hồi hiển thị trong hội thoại.")
+                st.caption("● Gemini được bật · xem nguồn ngay dưới câu trả lời.")
             elif ready_ai:
-                st.caption("Đang dùng học liệu giáo viên · có thể bật Gemini để thử AI.")
+                st.caption("● Học liệu giáo viên · có thể bật Gemini.")
             else:
-                st.caption("Học liệu dự phòng · chưa kết nối Gemini.")
-            ss["style"] = st.selectbox("Cách gia sư hướng dẫn",
-                ["Gợi mở vừa sức", "Giải thích dễ hiểu", "Gợi hình trực quan"],
-                index=["Gợi mở vừa sức", "Giải thích dễ hiểu", "Gợi hình trực quan"].index(
-                    ss.get("style", "Gợi mở vừa sức")), key=f"topic_style_{ss['id']}")
-            st.markdown('<div class="tutor-progress">Giai đoạn hiện tại: <strong>' +
-                        html.escape(ss["phase"]) + '</strong> · ' +
-                        str(ss.get("turns", 0)) + ' lượt trao đổi</div>', unsafe_allow_html=True)
-            last_reply = next((m for m in reversed(ss["messages"]) if m["role"] == "assistant"), None)
-            if last_reply:
-                st.markdown("**Câu hỏi gợi mở hiện tại**")
-                st.markdown('<div class="tutor-focus">' + html.escape(last_reply["text"]) + '</div>',
-                            unsafe_allow_html=True)
-                if last_reply.get("source"):
-                    st.caption("Nguồn: " + str(last_reply["source"]))
-            st.markdown("**Em cần trợ giúp theo cách nào?**")
-            can_request = ss["phase"] != "S0"
+                st.caption("● Học liệu dự phòng · Gemini chưa sẵn sàng.")
+            st.checkbox("Tôi đã che thông tin cá nhân và đồng ý gửi ảnh đính kèm đến Gemini",
+                        key=f"v5_image_consent_{ss['id']}",
+                        help="Chỉ áp dụng khi em đính kèm ảnh trong ô chat. Nội dung ảnh có thể gửi tới nhà cung cấp AI.")
+            st.markdown('**Khi cần gợi ý thêm**')
+            can_request = ss["phase"] != "S0" and not ss.get("pending_image")
             if st.button("💡 Hỏi dễ hơn", key=f"easier_{ss['id']}",
                          use_container_width=True, disabled=not can_request):
                 quick_message = "Em vẫn chưa hiểu. Hãy hỏi một bước nhỏ hơn, không lặp lại điều em đã làm đúng."
@@ -872,54 +947,84 @@ def circle_topic_tutor():
             if st.button("📘 Nhắc một kiến thức nền", key=f"foundation_{ss['id']}",
                          use_container_width=True, disabled=not can_request):
                 quick_message = "Em đang quên một kiến thức nền. Hãy nhắc một ý ngắn rồi hỏi em tự vận dụng."
-            if not can_request:
-                st.caption("Hãy tự viết suy nghĩ đầu tiên trong khung trò chuyện bên trái để mở hỗ trợ.")
-            with st.expander("📚 Tra cứu một kiến thức nền", expanded=False):
-                lesson = LESSONS.get(lid)
+            if ss["phase"] == "S0":
+                st.caption("Em hãy thử viết suy nghĩ đầu tiên trong khung chat để mở gợi ý.")
+            with st.expander("⚙️ Tùy chọn cách hướng dẫn", expanded=False):
+                ss["style"] = st.selectbox("Phong cách", ["Gợi mở vừa sức", "Giải thích dễ hiểu", "Gợi hình trực quan"],
+                    index=["Gợi mở vừa sức", "Giải thích dễ hiểu", "Gợi hình trực quan"].index(
+                        ss.get("style", "Gợi mở vừa sức")), key=f"topic_style_{ss['id']}")
+            with st.expander("📚 Kiến thức nền theo bài", expanded=False):
+                lesson = LESSONS.get(ss.get("selected_lesson"))
                 if lesson:
                     concepts = lesson.get("concepts", [])
                     if concepts:
-                        selected_concept = st.selectbox("Em cần nhắc kiến thức nào?",
-                            list(range(len(concepts))),
-                            format_func=lambda i: concepts[i][0], key=f"concept_{ss['id']}")
-                        st.caption(concepts[selected_concept][1])
+                        selected_concept = st.selectbox("Chọn một nội dung để nhắc lại",
+                            list(range(len(concepts))), format_func=lambda i: concepts[i][0],
+                            key=f"concept_{ss['id']}")
+                        st.write(concepts[selected_concept][1])
                 else:
-                    st.caption("Chọn đúng mạch kiến thức để xem nội dung phù hợp; chưa xác định được thì hỏi giáo viên.")
+                    st.caption("Chưa nhận diện chắc mạch kiến thức. Em có thể hỏi giáo viên.")
             if ss.get("learner_model") and ss["phase"] in ("S1", "S2"):
-                with st.expander("🧩 Những bước em đã làm được", expanded=False):
+                with st.expander("🧩 Tiến trình em đã thể hiện", expanded=False):
                     lm = ss["learner_model"]
                     for v in lm.get("observed", [])[:3]:
                         st.write("• " + str(v))
                     if lm.get("needs_work"):
                         st.write("**Đang cần làm rõ:** " + str(lm["needs_work"]))
                     st.caption("Nhận định tạm thời của gia sư, không phải điểm đánh giá.")
-            st.divider()
             if ss["phase"] != "S0":
-                if st.button("🔍 Chuyển sang tự kiểm chứng S2", key=f"goto_s2_{ss['id']}",
-                             use_container_width=True, disabled=ss["phase"] == "S2"):
-                    ss["phase"] = "S2"
-                    st.rerun()
-                if st.button("🚀 Bài vận dụng độc lập S3", key=f"goto_s3_{ss['id']}",
-                             use_container_width=True):
-                    target = ss.get("selected_lesson")
-                    skip = {ss["chosen_exercise"]["id"]} if ss.get("chosen_exercise") else set()
-                    nxt = next_self_practice(target, forbidden_ids=skip)
-                    if nxt:
-                        ss["s3_problem"] = nxt["problem"]
-                        ss["answered_practice_id"] = nxt["id"]
-                        ss["phase"] = "S3"
+                with st.expander("✅ Khi em đã sẵn sàng", expanded=False):
+                    if st.button("🔍 Tự kiểm chứng S2", key=f"goto_s2_{ss['id']}",
+                                 use_container_width=True, disabled=ss["phase"] == "S2"):
+                        ss["phase"] = "S2"
                         st.rerun()
-                    else:
-                        st.warning("Chưa chọn được bài độc lập phù hợp. Hãy chọn bài học cụ thể hoặc nhờ giáo viên.")
-            if ss["phase"] == "S2":
-                with st.expander("✍️ Phiếu tự kiểm chứng S2", expanded=True):
-                    ss["s2"] = st.text_area("Viết lập luận hoàn chỉnh bằng lời của em",
-                        value=ss.get("s2", ""), key=f"tutor_s2_{ss['id']}", height=145)
-                    st.caption("Kiểm tra giả thiết, từng bước suy luận và điều kiện kết luận.")
+                    if st.button("🚀 Vận dụng độc lập S3", key=f"goto_s3_{ss['id']}",
+                                 use_container_width=True):
+                        target = ss.get("selected_lesson")
+                        skip = {ss["chosen_exercise"]["id"]} if ss.get("chosen_exercise") else set()
+                        nxt = next_self_practice(target, forbidden_ids=skip)
+                        if nxt:
+                            ss["s3_problem"] = nxt["problem"]
+                            ss["answered_practice_id"] = nxt["id"]
+                            ss["phase"] = "S3"
+                            st.rerun()
+                        else:
+                            st.warning("Chưa chọn được bài độc lập phù hợp. Em chọn bài học cụ thể hoặc hỏi giáo viên nhé.")
+                    if ss["phase"] == "S2":
+                        ss["s2"] = st.text_area("Phiếu tự kiểm chứng: em viết lập luận bằng lời của mình",
+                            value=ss.get("s2", ""), key=f"tutor_s2_{ss['id']}", height=150)
         else:
-            st.markdown("**S3 · Tự làm, không có gợi ý**" if ss["phase"] == "S3" else "**Hoàn tất lượt học**")
-            st.caption("Khu vực hỗ trợ đã khóa để đảm bảo bài vận dụng không được AI hướng dẫn.")
-    incoming = incoming_from_chat or quick_message
+            st.success("S3 · Bài độc lập, công cụ gợi mở tạm khóa" if ss["phase"] == "S3" else "Đã hoàn tất lượt học")
+            st.caption("Không hiển thị gợi ý trong giai đoạn vận dụng độc lập.")
+
+    incoming = quick_message
+    if incoming_from_chat and ss["phase"] in ("S0", "S1", "S2"):
+        files = list(getattr(incoming_from_chat, "files", []) or [])
+        typed = str(getattr(incoming_from_chat, "text", "") or "").strip()
+        if files:
+            if not (ss.get("use_ai") and ai_is_enabled()):
+                st.warning("Để đọc ảnh, em cần bật Gemini ở Góc hỗ trợ. Hoặc em có thể nhập đề bằng chữ.")
+            elif not st.session_state.get(f"v5_image_consent_{ss['id']}", False):
+                st.warning("Trước khi gửi ảnh, em cần che thông tin cá nhân và đánh dấu đồng ý gửi ảnh đến Gemini.")
+            else:
+                data = files[0].getvalue()
+                if len(data) > MAX_IMAGE_BYTES:
+                    st.error("Ảnh lớn hơn 8 MB; hãy chụp hoặc cắt ảnh nhỏ lại.")
+                else:
+                    with st.spinner("Đang đọc nội dung ảnh. Chưa giải toán…"):
+                        try:
+                            parsed = read_math_image(data, secret_value("GEMINI_API_KEY"),
+                                secret_value("GEMINI_MODEL") or "gemini-2.5-flash")
+                        except ImageReadingError as err:
+                            st.error(str(err))
+                        else:
+                            ss["pending_image"] = {**parsed, "note": typed[:500],
+                                                   "token": uuid.uuid4().hex[:10]}
+                            st.rerun()
+        else:
+            incoming = typed
+    elif isinstance(incoming_from_chat, str):
+        incoming = incoming_from_chat
     if incoming and ss["phase"] in ("S0", "S1", "S2"):
         if len(incoming.strip()) < 3:
             st.warning("Em hãy viết rõ hơn một chút nhé.")
@@ -989,9 +1094,9 @@ def circle_topic_tutor():
 def guide():
     st.title("❓ Hướng dẫn và giới hạn sử dụng")
     st.subheader("Hỏi gia sư cho toàn bộ chủ đề Đường tròn")
-    st.write("Chọn **Gia sư Đường tròn**, nhập bài toán hoặc một bài trong kho 40 bài; ghi điều em đã thử; trò chuyện với gia sư để nhận phản hồi theo tiến trình. Có thể chọn cách gợi mở vừa sức, giải thích dễ hiểu hoặc gợi hình; sau đó tự kiểm chứng và làm bài mới độc lập. Ứng dụng có học liệu từ cả Bài 13 đến Bài 17, không phải một bài cố định.")
+    st.write("Chọn **Gia sư Đường tròn**, nhập/chụp đề hoặc chọn một bài trong kho 40 bài. Phần trái là hội thoại, phần phải là góc hỗ trợ. Em hãy tự viết bước đầu, xin gợi ý khi cần, rồi kiểm chứng và làm bài mới độc lập. Có học liệu Bài 13 đến Bài 17.")
     st.subheader("Dành cho học sinh")
-    st.write("1. Chọn 'Gia sư Đường tròn', nhập mã HSxx và bài toán riêng (hoặc bài trong ngân hàng). 2. Ghi bước em đã thử. 3. Trao đổi cùng trợ lý bằng câu hỏi ngắn, tự kiểm chứng. 4. Chọn bài vận dụng mới không có AI. 5. Xuất nhật ký JSON; chỉ lưu lên máy chủ thử nghiệm nếu được phép.")
+    st.write("1. Vào Gia sư Đường tròn, chọn đề bằng chữ, ảnh hoặc ngân hàng. 2. Tự viết bước đầu tiên trong khung hội thoại. 3. Dùng Góc hỗ trợ nếu cần gợi ý. 4. Có thể đính kèm ảnh đề/hình vẽ ngay trong ô chat; trước đó bật Gemini và đồng ý gửi ảnh, sau đó đối chiếu bản chép. 5. Tự kiểm chứng và làm bài S3. 6. Xuất nhật ký JSON khi cần.")
     st.subheader("Dành cho giáo viên")
     st.write("Cấu hình ADMIN_PASSWORD trong Streamlit Secrets, mở Góc giáo viên để xem nhật ký và nhập dữ liệu đánh giá thực tế. Có thể xuất CSV và bốn biểu đồ khi có cặp điểm trước/sau.")
     st.subheader("Khác biệt giữa chatbot theo kịch bản và chatbot AI")
@@ -1027,7 +1132,7 @@ with st.sidebar:
         label = "Học liệu dự phòng · chưa dùng Gemini"
     st.caption("🟢 Chế độ: " + label)
     st.caption("Không đăng nhập bằng họ tên thật")
-    st.caption("Phiên bản 4.2 · Hội thoại trái, gợi mở phải")
+    st.caption("Phiên bản 5.0 · Không gian học tập tập trung")
 
 if selected == "Trang chủ": home()
 elif selected == "Gia sư Đường tròn": circle_topic_tutor()
