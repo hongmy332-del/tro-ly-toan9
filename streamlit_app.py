@@ -201,7 +201,7 @@ def home():
                     st.session_state['pref_task'] = tid
                     st.session_state.screen = 'Luyện bài mẫu S0–S3'
                     st.rerun()
-    st.info('**Phiên bản 5.0 – giao diện học sinh tối giản (Chương V, có đọc ảnh).** Khi chưa bật Gemini, ứng dụng dùng câu hỏi giáo viên biên soạn. Khi bật Gemini, trợ lý có thể đặt câu hỏi linh hoạt hơn theo bài làm, nhưng có thể sai và phải được giáo viên giám sát. Không nhập dữ liệu cá nhân.')
+    st.info('**Phiên bản 5.1 – gia sư gợi mở thích ứng (Chương V, có đọc ảnh).** Khi chưa bật Gemini, ứng dụng dùng câu hỏi giáo viên biên soạn. Khi bật Gemini, trợ lý có thể đặt câu hỏi linh hoạt hơn theo bài làm, nhưng có thể sai và phải được giáo viên giám sát. Không nhập dữ liệu cá nhân.')
 
 
 def start_or_continue():
@@ -688,7 +688,7 @@ def circle_topic_tutor():
     """Gia sư hội thoại theo tiến trình; cho nhập đề bất kỳ trong toàn chương, giữ mạch S0–S3 ở nền."""
     st.markdown('''<div class="v5-topbar">
         <div class="v5-brand">📘 TRỢ LÝ GỢI MỞ TOÁN 9</div>
-        <div class="v5-subbrand">Gia sư Chương V · V5.0 · Học từng bước, không giải thay</div>
+        <div class="v5-subbrand">Gia sư Chương V · V5.1 · Nhớ bước em đã làm</div>
         </div>''', unsafe_allow_html=True)
     if "circle_chat" not in st.session_state:
         st.session_state.circle_chat = None
@@ -813,7 +813,7 @@ def circle_topic_tutor():
                 st.write(f"**{content['title']}** — {content['summary']}")
         return
 
-    # V5.0: khung chat là không gian chính; các hỗ trợ chỉ mở khi học sinh cần.
+    # V5.1: tiếp tục giao diện V5.0; hồ sơ hỗ trợ được mở khi cần, không tạo thêm cột.
     lid = ss.get("selected_lesson")
     title = LESSONS[lid]["title"] if lid in LESSONS else "Chưa xác định chính xác mạch kiến thức"
     top = st.columns([6, 1.4], gap="small", vertical_alignment="center")
@@ -853,7 +853,7 @@ def circle_topic_tutor():
                 accept_file=True, file_type=["jpg", "jpeg", "png", "webp"],
                 max_chars=1400, disabled=bool(ss.get("pending_image")),
             )
-            st.caption("Enter để gửi · Đính kèm ảnh đề/hình vẽ (cần xác nhận bản đọc) · Không gửi thông tin cá nhân")
+            st.caption("Enter để gửi · Gia sư nhớ các bước em đã trình bày · Ảnh phải được xác nhận · Không nhập thông tin cá nhân")
         elif ss["phase"] == "S3":
             st.info("**S3 – Bài vận dụng độc lập:** Gia sư tạm dừng để em tự làm.")
             with st.container(border=True):
@@ -936,6 +936,25 @@ def circle_topic_tutor():
             st.checkbox("Tôi đã che thông tin cá nhân và đồng ý gửi ảnh đính kèm đến Gemini",
                         key=f"v5_image_consent_{ss['id']}",
                         help="Chỉ áp dụng khi em đính kèm ảnh trong ô chat. Nội dung ảnh có thể gửi tới nhà cung cấp AI.")
+            # V5.1 – minh bạch mức gợi ý, chỉ là dấu hiệu tạm, không phải chấm điểm.
+            model = ss.get('learner_model') or {}
+            if model.get('hint_level'):
+                level = int(model['hint_level'])
+                st.caption(f"💡 Mức gợi mở hiện tại: **{level}/3** · "
+                           + {1:'Định hướng', 2:'Chia bước nhỏ', 3:'Ví dụ / hình dung'}.get(level,'Định hướng'))
+            with st.expander('🧭 Gia sư đang theo dõi điều gì?', expanded=False):
+                st.caption('Đây là ghi nhận tạm từ hội thoại, **không phải kết quả chấm đúng/sai**. Em có thể sửa nếu gia sư hiểu nhầm.')
+                if model.get('observed'):
+                    st.markdown('**Điều em đã trình bày**')
+                    st.caption(str(model['observed'][-1])[:195])
+                if model.get('needs_work'):
+                    st.markdown('**Điểm cần làm rõ**')
+                    st.write(str(model['needs_work'])[:160])
+                if model.get('misconception'):
+                    st.markdown('**Khả năng có nhầm lẫn cần kiểm tra**')
+                    st.write(str(model['misconception'])[:165])
+                if not model:
+                    st.caption('Sau lượt trả lời đầu tiên, gia sư sẽ ghi nhận lời em đã viết.')
             st.markdown('**Khi cần gợi ý thêm**')
             can_request = ss["phase"] != "S0" and not ss.get("pending_image")
             if st.button("💡 Hỏi dễ hơn", key=f"easier_{ss['id']}",
@@ -947,6 +966,10 @@ def circle_topic_tutor():
             if st.button("📘 Nhắc một kiến thức nền", key=f"foundation_{ss['id']}",
                          use_container_width=True, disabled=not can_request):
                 quick_message = "Em đang quên một kiến thức nền. Hãy nhắc một ý ngắn rồi hỏi em tự vận dụng."
+            if st.button('✅ Em nghĩ mình đã hiểu', key=f"ready_{ss['id']}",
+                         use_container_width=True, disabled=not can_request):
+                quick_message = ('Em nghĩ mình đã hiểu bước này. Hãy yêu cầu em giải thích căn cứ, '
+                                 'không kết luận thay em; nếu em giải thích ổn mới chuyển sang tự kiểm chứng.')
             if ss["phase"] == "S0":
                 st.caption("Em hãy thử viết suy nghĩ đầu tiên trong khung chat để mở gợi ý.")
             with st.expander("⚙️ Tùy chọn cách hướng dẫn", expanded=False):
@@ -964,14 +987,6 @@ def circle_topic_tutor():
                         st.write(concepts[selected_concept][1])
                 else:
                     st.caption("Chưa nhận diện chắc mạch kiến thức. Em có thể hỏi giáo viên.")
-            if ss.get("learner_model") and ss["phase"] in ("S1", "S2"):
-                with st.expander("🧩 Tiến trình em đã thể hiện", expanded=False):
-                    lm = ss["learner_model"]
-                    for v in lm.get("observed", [])[:3]:
-                        st.write("• " + str(v))
-                    if lm.get("needs_work"):
-                        st.write("**Đang cần làm rõ:** " + str(lm["needs_work"]))
-                    st.caption("Nhận định tạm thời của gia sư, không phải điểm đánh giá.")
             if ss["phase"] != "S0":
                 with st.expander("✅ Khi em đã sẵn sàng", expanded=False):
                     if st.button("🔍 Tự kiểm chứng S2", key=f"goto_s2_{ss['id']}",
@@ -1041,19 +1056,18 @@ def circle_topic_tutor():
                     ss["use_ai"], chosen_exercise=ss.get("chosen_exercise"),
                     learner_model=ss.get("learner_model", {}), style=ss["style"], phase=ss["phase"])
             if meta.get("learning"):
-                previous = ss.get("learner_model") or {}
-                newest = meta["learning"].copy()
-                cumulative = list(dict.fromkeys(
-                    [str(x) for x in previous.get("observed", [])] +
-                    [str(x) for x in newest.get("observed", [])]))
-                newest["observed"] = cumulative[-6:]
-                ss["learner_model"] = newest
+                # V5.1: bộ xử lý đã xây dựng hồ sơ tạm tích lũy bằng chứng từ các lượt.
+                ss["learner_model"] = meta["learning"]
+            if meta.get('hint_level') and ss["phase"] == 'S1':
+                ss["highest_hint"] = max(int(ss.get('highest_hint') or 0), int(meta['hint_level']))
             ss["last_source"] = source
             ss.setdefault("support_log", []).append({
                 "turn": ss["turns"], "source": source, "ai_used": meta.get("ai_used", False),
                 "reported_support": meta.get("support_level", "Không xác định"),
-                "diagnosis": meta.get("diagnostic", ""), "phase": ss["phase"]})
-            # Không quy đổi số lượt hỏi AI thành mức gợi ý 1–3.
+                "hint_level": meta.get("hint_level", 0),
+                "diagnosis": meta.get("diagnostic", ""),
+                "possible_misconception": meta.get("learning", {}).get("misconception", ""),
+                "phase": ss["phase"]})
             ss["messages"].append({"role": "assistant", "text": reply,
                                     "source": source, "meta": meta})
             st.rerun()
@@ -1096,7 +1110,7 @@ def guide():
     st.subheader("Hỏi gia sư cho toàn bộ chủ đề Đường tròn")
     st.write("Chọn **Gia sư Đường tròn**, nhập/chụp đề hoặc chọn một bài trong kho 40 bài. Phần trái là hội thoại, phần phải là góc hỗ trợ. Em hãy tự viết bước đầu, xin gợi ý khi cần, rồi kiểm chứng và làm bài mới độc lập. Có học liệu Bài 13 đến Bài 17.")
     st.subheader("Dành cho học sinh")
-    st.write("1. Vào Gia sư Đường tròn, chọn đề bằng chữ, ảnh hoặc ngân hàng. 2. Tự viết bước đầu tiên trong khung hội thoại. 3. Dùng Góc hỗ trợ nếu cần gợi ý. 4. Có thể đính kèm ảnh đề/hình vẽ ngay trong ô chat; trước đó bật Gemini và đồng ý gửi ảnh, sau đó đối chiếu bản chép. 5. Tự kiểm chứng và làm bài S3. 6. Xuất nhật ký JSON khi cần.")
+    st.write("1. Vào Gia sư Đường tròn, chọn đề hoặc chụp ảnh. 2. Nói điều em đã thử; gia sư ghi nhận theo từng lượt. 3. Khi chưa hiểu, chọn Hỏi dễ hơn / Gợi bằng hình dung / Nhắc kiến thức nền. 4. Xem 🧭 Gia sư đang theo dõi điều gì? để sửa nhận định chưa đúng. 5. Tự kiểm chứng S2, làm bài mới S3 và xuất nhật ký khi cần.")
     st.subheader("Dành cho giáo viên")
     st.write("Cấu hình ADMIN_PASSWORD trong Streamlit Secrets, mở Góc giáo viên để xem nhật ký và nhập dữ liệu đánh giá thực tế. Có thể xuất CSV và bốn biểu đồ khi có cặp điểm trước/sau.")
     st.subheader("Khác biệt giữa chatbot theo kịch bản và chatbot AI")
@@ -1132,7 +1146,7 @@ with st.sidebar:
         label = "Học liệu dự phòng · chưa dùng Gemini"
     st.caption("🟢 Chế độ: " + label)
     st.caption("Không đăng nhập bằng họ tên thật")
-    st.caption("Phiên bản 5.0 · Không gian học tập tập trung")
+    st.caption("Phiên bản 5.1 · Gia sư gợi mở thích ứng")
 
 if selected == "Trang chủ": home()
 elif selected == "Gia sư Đường tròn": circle_topic_tutor()
