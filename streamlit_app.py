@@ -17,7 +17,10 @@ import streamlit as st
 from math_tasks import TASKS
 from circle_curriculum import TOPIC_NAME, LESSONS, EXERCISES, guess_lesson, lesson_exercises
 from circle_tutor import ask_tutor, next_self_practice
-from image_reader import read_math_image, ImageReadingError, MAX_IMAGE_BYTES
+from image_reader import read_math_image, read_student_work_image, ImageReadingError, MAX_IMAGE_BYTES
+from math_tools import MODEL_LABELS, LESSON_DEFAULT, geometry_html
+from voice_reader import transcribe_math_audio, AudioReadingError, MAX_AUDIO_BYTES
+import streamlit.components.v1 as components
 from tutor_engine import feedback_on_attempt, generate_hint, secret_value, is_substantive_attempt, chat_response, ai_is_enabled, review_reasoning, gemini_connection_test
 from storage import (all_assessments, all_sessions, assessment_summary,
                      save_assessment, to_csv_bytes, upsert_session)
@@ -113,6 +116,11 @@ st.markdown("""
 @media (max-width:850px){.v5-topbar{display:block;padding:13px 15px}.v5-subbrand{text-align:left;margin-top:3px}.v5-phases{grid-template-columns:repeat(2,minmax(0,1fr))}.v5-phase{font-size:.76rem}.v5-pane-label{font-size:1rem}}
 </style>
 """, unsafe_allow_html=True)
+
+
+def append_math_symbol(key: str, symbol: str):
+    """Callback chạy trước khi widget tạo nên có thể sửa nội dung ô nháp an toàn."""
+    st.session_state[key] = (str(st.session_state.get(key, "")) + symbol)[:1400]
 
 
 def now():
@@ -688,14 +696,14 @@ def circle_topic_tutor():
     """Gia sư hội thoại theo tiến trình; cho nhập đề bất kỳ trong toàn chương, giữ mạch S0–S3 ở nền."""
     st.markdown('''<div class="v5-topbar">
         <div class="v5-brand">📘 TRỢ LÝ GỢI MỞ TOÁN 9</div>
-        <div class="v5-subbrand">Gia sư Chương V · V5.1 · Nhớ bước em đã làm</div>
+        <div class="v5-subbrand">Gia sư Chương V · V5.2 · Hình động & học đa phương thức</div>
         </div>''', unsafe_allow_html=True)
     if "circle_chat" not in st.session_state:
         st.session_state.circle_chat = None
     ss = st.session_state.circle_chat
     if not ss:
         st.subheader("Chọn đề toán để bắt đầu")
-        st.caption("Nhập đề, chụp ảnh hoặc chọn từ ngân hàng; sau đó trò chuyện cùng gia sư.")
+        st.caption("Nhập hoặc chụp đề, chọn bài trong kho; trong cuộc học còn có thể gửi ảnh bài làm, dùng hình động, bàn phím Toán và ghi âm tiếng Việt.")
         col1, col2 = st.columns([2, 1])
         with col1:
             code = st.text_input("Mã học sinh (không dùng tên thật)", value="HS01", key="topic_code", max_chars=6)
@@ -846,14 +854,14 @@ def circle_topic_tutor():
                         if m.get("source") and m["role"] == "assistant":
                             st.caption(m["source"])
             if ss.get("pending_image"):
-                st.info("Ảnh đã được đọc sơ bộ. Hãy đối chiếu đề ở **Góc hỗ trợ** trước khi tiếp tục trò chuyện.")
+                st.info("Ảnh đã được đọc sơ bộ. Hãy kiểm tra nội dung ở **Góc hỗ trợ** trước khi tiếp tục.")
             incoming_from_chat = st.chat_input(
-                "Viết điều em đang vướng hoặc đính kèm ảnh đề…",
+                "Hỏi gia sư hoặc đính kèm ảnh đề / ảnh bài làm…",
                 key=f"v5_chat_input_{ss['id']}",
                 accept_file=True, file_type=["jpg", "jpeg", "png", "webp"],
                 max_chars=1400, disabled=bool(ss.get("pending_image")),
             )
-            st.caption("Enter để gửi · Gia sư nhớ các bước em đã trình bày · Ảnh phải được xác nhận · Không nhập thông tin cá nhân")
+            st.caption("Enter để gửi · Gia sư nhớ bước em đã làm · Ảnh đề hoặc bài giải phải được xác nhận · Không nhập thông tin cá nhân")
         elif ss["phase"] == "S3":
             st.info("**S3 – Bài vận dụng độc lập:** Gia sư tạm dừng để em tự làm.")
             with st.container(border=True):
@@ -877,49 +885,74 @@ def circle_topic_tutor():
             st.write(ss["problem"])
         if ss.get("pending_image") and ss["phase"] in ("S0", "S1", "S2"):
             draft = ss["pending_image"]
-            st.warning("**Xác nhận ảnh trước khi dùng:** Gemini có thể đọc nhầm số và hình.")
+            kind = draft.get("kind", "problem")
+            st.warning("**Bắt buộc kiểm tra ảnh:** AI có thể đọc nhầm ký hiệu, số liệu hoặc nét chữ viết tay.")
             with st.container(border=True):
-                corrected = st.text_area(
-                    "Đề trong ảnh (sửa nếu có chỗ sai)",
-                    value=draft.get("problem_text", ""),
-                    key=f"v5_image_review_text_{ss['id']}_{draft['token']}", height=160)
-                sketch = st.text_area(
-                    "Mô tả hình vẽ/nhãn điểm", value=draft.get("diagram_description", ""),
-                    key=f"v5_image_review_diagram_{ss['id']}_{draft['token']}", height=100)
-                if draft.get("uncertain_details"):
-                    st.caption("Chỗ cần kiểm tra: " + "; ".join(draft["uncertain_details"]))
-                how = st.radio("Dùng ảnh vào đâu?", ["Bổ sung vào đề đang học", "Bắt đầu đề mới"],
-                               key=f"v5_image_import_{ss['id']}_{draft['token']}")
-                checked = st.checkbox("Em đã đối chiếu đề và hình với ảnh gốc.",
-                                      key=f"v5_image_confirm_{ss['id']}_{draft['token']}")
-                if st.button("✅ Dùng nội dung đã xác nhận", disabled=not checked,
-                             key=f"v5_image_accept_{ss['id']}", type="primary", use_container_width=True):
-                    verified_text = corrected.strip()
-                    if len(verified_text) < 12:
-                        st.warning("Em cần ghi rõ nội dung đề đã kiểm tra.")
-                    else:
-                        if sketch.strip():
-                            verified_text += "\n[Mô tả hình đã được đối chiếu: " + sketch.strip()[:1000] + "]"
-                        if how == "Bắt đầu đề mới":
-                            ss["problem"] = verified_text[:2500]
-                            ss["selected_lesson"] = guess_lesson(ss["problem"])[0]
-                            ss["chosen_exercise"] = None
-                            ss["messages"] = [{"role":"assistant", "text":
-                                "Mình đã nhận đề mới sau khi em kiểm tra ảnh. Em hãy cho biết một dữ kiện hoặc ý tưởng đầu tiên em nhận ra nhé?",
-                                "source":"Khởi động S0 · ảnh đã xác nhận"}]
-                            ss.update({"phase":"S0", "turns":0, "highest_hint":None, "s0":"", "s2":"",
-                                       "s3_problem":"", "s3_answer":"", "learner_model":{}, "support_log":[]})
+                if kind == "work":
+                    st.markdown("**✍️ Xác nhận bài làm của em**")
+                    corrected = st.text_area(
+                        "Những bước em đã viết (em có thể sửa)",
+                        value=draft.get("work_text", ""),
+                        key=f"v52_work_review_{ss['id']}_{draft['token']}", height=200)
+                    question = st.text_input("Em muốn gia sư giúp ở đâu?",
+                        value=draft.get("note", "") or "Em muốn biết bước nào cần kiểm tra lại.",
+                        key=f"v52_work_question_{ss['id']}_{draft['token']}")
+                    if draft.get("uncertain_details"):
+                        st.caption("Chữ/ký hiệu cần kiểm tra: " + "; ".join(draft["uncertain_details"]))
+                    confirmed = st.checkbox("Em đã đối chiếu từng dòng với bài viết thật; em hiểu AI chưa chấm đúng/sai.",
+                        key=f"v52_work_confirm_{ss['id']}_{draft['token']}")
+                    if st.button("✅ Gửi bài làm đã kiểm tra để gia sư gợi mở", disabled=not confirmed,
+                                 key=f"v52_work_accept_{ss['id']}", type="primary", use_container_width=True):
+                        if len(corrected.strip()) < 2:
+                            st.warning("Em cần nhập các bước em đã viết.")
                         else:
-                            # Chỉ nhận phần được học sinh kiểm tra, không giữ ảnh gốc trong phiên.
-                            ss["problem"] = (ss["problem"] + "\n[Dữ kiện bổ sung từ ảnh đã xác nhận: "
-                                             + verified_text[:1100] + "]")[:3500]
-                            ss["messages"].append({"role":"assistant", "text":
-                                "Mình đã bổ sung thông tin từ ảnh vào đề. Em muốn thử bước nào tiếp theo?",
-                                "source":"Ảnh đã đối chiếu"})
-                        ss["problem_from_image"] = True
-                        ss.pop("pending_image", None)
-                        st.rerun()
-                if st.button("Hủy ảnh", key=f"v5_image_cancel_{ss['id']}", use_container_width=True):
+                            ss["pending_work_message"] = (
+                                "Đây là bài làm của em được em đối chiếu từ ảnh (chưa được xác nhận đúng sai):\n"
+                                + corrected.strip()[:1100] + "\nĐiều em muốn hỏi: " + question.strip()[:180]
+                                + "\nHãy hỏi em một câu để tự kiểm tra bước cần xem lại, đừng giải thay.")
+                            ss.pop("pending_image", None)
+                            st.rerun()
+                else:
+                    corrected = st.text_area(
+                        "Đề trong ảnh (sửa nếu có chỗ sai)",
+                        value=draft.get("problem_text", ""),
+                        key=f"v52_image_review_text_{ss['id']}_{draft['token']}", height=155)
+                    sketch = st.text_area("Mô tả hình vẽ/nhãn điểm",
+                        value=draft.get("diagram_description", ""),
+                        key=f"v52_image_review_diagram_{ss['id']}_{draft['token']}", height=95)
+                    if draft.get("uncertain_details"):
+                        st.caption("Chỗ cần kiểm tra: " + "; ".join(draft["uncertain_details"]))
+                    how = st.radio("Dùng ảnh vào đâu?", ["Bổ sung vào đề đang học", "Bắt đầu đề mới"],
+                        key=f"v52_image_import_{ss['id']}_{draft['token']}")
+                    checked = st.checkbox("Em đã đối chiếu đề và hình với ảnh gốc.",
+                        key=f"v52_image_confirm_{ss['id']}_{draft['token']}")
+                    if st.button("✅ Dùng đề đã xác nhận", disabled=not checked,
+                        key=f"v52_image_accept_{ss['id']}", type="primary", use_container_width=True):
+                        verified_text = corrected.strip()
+                        if len(verified_text) < 12:
+                            st.warning("Em cần ghi rõ đề toán đã kiểm tra.")
+                        else:
+                            if sketch.strip():
+                                verified_text += "\n[Mô tả hình đã được đối chiếu: " + sketch.strip()[:900] + "]"
+                            if how == "Bắt đầu đề mới":
+                                ss["problem"] = verified_text[:2500]
+                                ss["selected_lesson"] = guess_lesson(ss["problem"])[0]
+                                ss["chosen_exercise"] = None
+                                ss["messages"] = [{"role":"assistant", "text":
+                                    "Mình đã nhận đề mới sau khi em kiểm tra ảnh. Em hãy thử nêu một dữ kiện trước nhé?",
+                                    "source":"Khởi động S0 · ảnh đã xác nhận"}]
+                                ss.update({"phase":"S0", "turns":0,"highest_hint":None,"s0":"","s2":"",
+                                    "s3_problem":"","s3_answer":"","learner_model":{},"support_log":[]})
+                            else:
+                                ss["problem"] = (ss["problem"] + "\n[Dữ kiện bổ sung từ ảnh đã xác nhận: "
+                                    + verified_text[:1100] + "]")[:3500]
+                                ss["messages"].append({"role":"assistant", "text":
+                                    "Mình đã bổ sung thông tin từ ảnh. Em muốn thử bước nào tiếp theo?",
+                                    "source":"Ảnh đã được đối chiếu"})
+                            ss["problem_from_image"] = True
+                            ss.pop("pending_image", None)
+                            st.rerun()
+                if st.button("✕ Hủy ảnh", key=f"v52_image_cancel_{ss['id']}", use_container_width=True):
                     ss.pop("pending_image", None)
                     st.rerun()
         if ss["phase"] in ("S0", "S1", "S2"):
@@ -933,6 +966,10 @@ def circle_topic_tutor():
                 st.caption("● Học liệu giáo viên · có thể bật Gemini.")
             else:
                 st.caption("● Học liệu dự phòng · Gemini chưa sẵn sàng.")
+            ss["image_kind"] = st.radio("Ảnh gửi trong ô chat là:",
+                ["Đề toán", "Bài làm của em"], horizontal=True,
+                key=f"v52_image_kind_{ss['id']}",
+                help="Chọn trước khi đính kèm ảnh. Với bài làm, gia sư chỉ đọc các bước em viết, không tự chấm điểm.")
             st.checkbox("Tôi đã che thông tin cá nhân và đồng ý gửi ảnh đính kèm đến Gemini",
                         key=f"v5_image_consent_{ss['id']}",
                         help="Chỉ áp dụng khi em đính kèm ảnh trong ô chat. Nội dung ảnh có thể gửi tới nhà cung cấp AI.")
@@ -987,6 +1024,59 @@ def circle_topic_tutor():
                         st.write(concepts[selected_concept][1])
                 else:
                     st.caption("Chưa nhận diện chắc mạch kiến thức. Em có thể hỏi giáo viên.")
+            st.markdown('**🧰 Công cụ học Toán V5.2**')
+            with st.expander("📐 Hình học động – tự kéo để quan sát", expanded=False):
+                default_model = LESSON_DEFAULT.get(ss.get("selected_lesson"), "circle_circle")
+                st.caption("Di chuyển thanh trượt và dự đoán trước khi mở nhận xét. Mô hình là ví dụ kiến thức nền, không tự vẽ hình riêng của đề.")
+                components.html(geometry_html(default_model), height=640, scrolling=True)
+            with st.expander("⌨️ Bàn phím ký hiệu Toán 9", expanded=False):
+                math_key = f"v52_math_text_{ss['id']}"
+                math_symbols = ["√", "²", "³", "π", "∠", "°", "≤", "≥", "⊥", "∥", "Δ", "|R−r|", "(O; R)", "≈", "≠"]
+                for start_idx in range(0, len(math_symbols), 5):
+                    cols = st.columns(5, gap="small")
+                    for j, token in enumerate(math_symbols[start_idx:start_idx+5]):
+                        with cols[j]:
+                            st.button(token, key=f"v52_math_token_{ss['id']}_{start_idx+j}",
+                                use_container_width=True, on_click=append_math_symbol, args=(math_key, token))
+                draft_math = st.text_area("Viết bước em đã làm, có thể bấm ký hiệu ở trên",
+                    key=math_key, height=95, placeholder="Ví dụ: |R−r| = |5−3| = 2")
+                if st.button("💬 Gửi bước Toán này vào hội thoại", key=f"v52_math_send_{ss['id']}",
+                             use_container_width=True, disabled=not draft_math.strip() or bool(ss.get("pending_image"))):
+                    quick_message = draft_math.strip()[:1100]
+            with st.expander("🎙️ Nói để hỏi gia sư", expanded=False):
+                st.caption("Ghi âm ngắn bằng tiếng Việt. Chỉ gửi âm thanh đến Gemini sau khi em đồng ý. Em sẽ được sửa bản chép lời trước khi hỏi.")
+                voice_ready = bool(ss.get("use_ai") and ai_is_enabled())
+                audio = st.audio_input("Thu lời em hỏi", key=f"v52_audio_{ss['id']}")
+                consent_audio = st.checkbox("Âm thanh không chứa dữ liệu cá nhân; em đồng ý gửi đến Gemini để chép lời.",
+                    key=f"v52_audio_consent_{ss['id']}")
+                if st.button("🔎 Chuyển giọng nói thành chữ", key=f"v52_audio_read_{ss['id']}",
+                             disabled=not (audio and consent_audio and voice_ready), use_container_width=True):
+                    with st.spinner("Đang chép lời, chưa gửi câu hỏi cho gia sư…"):
+                        try:
+                            speech = transcribe_math_audio(audio.getvalue(), secret_value("GEMINI_API_KEY"),
+                                secret_value("GEMINI_MODEL") or "gemini-2.5-flash",
+                                mime_type="audio/wav")
+                        except AudioReadingError as error:
+                            st.error(str(error))
+                        else:
+                            ss["pending_voice"] = {"text":speech, "token":uuid.uuid4().hex[:8]}
+                            st.rerun()
+                if not voice_ready:
+                    st.caption("Cần bật Gia sư Gemini để chép lời. Nếu không, hãy dùng bàn phím.")
+                if ss.get("pending_voice"):
+                    speech = ss["pending_voice"]
+                    verified_speech = st.text_area("Em nghe lại và sửa lời AI đã chép",
+                        value=speech["text"], key=f"v52_speech_verify_{ss['id']}_{speech['token']}", height=110)
+                    st.warning("Kiểm tra đặc biệt các số, dấu căn, dấu mũ, nhãn điểm và thuật ngữ Toán.")
+                    confirm_speech = st.checkbox("Em đã kiểm tra nội dung trước khi gửi cho gia sư",
+                        key=f"v52_speech_confirm_{ss['id']}_{speech['token']}")
+                    if st.button("💬 Gửi lời đã xác nhận", key=f"v52_speech_send_{ss['id']}",
+                        use_container_width=True, disabled=not confirm_speech or len(verified_speech.strip())<3):
+                        quick_message = verified_speech.strip()[:1100]
+                        ss.pop("pending_voice",None)
+                    if st.button("✕ Hủy bản ghi", key=f"v52_speech_cancel_{ss['id']}", use_container_width=True):
+                        ss.pop("pending_voice",None)
+                        st.rerun()
             if ss["phase"] != "S0":
                 with st.expander("✅ Khi em đã sẵn sàng", expanded=False):
                     if st.button("🔍 Tự kiểm chứng S2", key=f"goto_s2_{ss['id']}",
@@ -1013,6 +1103,8 @@ def circle_topic_tutor():
             st.caption("Không hiển thị gợi ý trong giai đoạn vận dụng độc lập.")
 
     incoming = quick_message
+    if ss.get("pending_work_message") and ss["phase"] in ("S0", "S1", "S2"):
+        incoming = ss.pop("pending_work_message")
     if incoming_from_chat and ss["phase"] in ("S0", "S1", "S2"):
         files = list(getattr(incoming_from_chat, "files", []) or [])
         typed = str(getattr(incoming_from_chat, "text", "") or "").strip()
@@ -1026,14 +1118,16 @@ def circle_topic_tutor():
                 if len(data) > MAX_IMAGE_BYTES:
                     st.error("Ảnh lớn hơn 8 MB; hãy chụp hoặc cắt ảnh nhỏ lại.")
                 else:
-                    with st.spinner("Đang đọc nội dung ảnh. Chưa giải toán…"):
+                    kind = "work" if ss.get("image_kind") == "Bài làm của em" else "problem"
+                    with st.spinner("Đang đọc " + ("bài làm" if kind == "work" else "đề toán") + ", chưa giải bài…"):
                         try:
-                            parsed = read_math_image(data, secret_value("GEMINI_API_KEY"),
+                            reader = read_student_work_image if kind == "work" else read_math_image
+                            parsed = reader(data, secret_value("GEMINI_API_KEY"),
                                 secret_value("GEMINI_MODEL") or "gemini-2.5-flash")
                         except ImageReadingError as err:
                             st.error(str(err))
                         else:
-                            ss["pending_image"] = {**parsed, "note": typed[:500],
+                            ss["pending_image"] = {**parsed, "kind":kind, "note":typed[:300],
                                                    "token": uuid.uuid4().hex[:10]}
                             st.rerun()
         else:
@@ -1109,6 +1203,11 @@ def guide():
     st.title("❓ Hướng dẫn và giới hạn sử dụng")
     st.subheader("Hỏi gia sư cho toàn bộ chủ đề Đường tròn")
     st.write("Chọn **Gia sư Đường tròn**, nhập/chụp đề hoặc chọn một bài trong kho 40 bài. Phần trái là hội thoại, phần phải là góc hỗ trợ. Em hãy tự viết bước đầu, xin gợi ý khi cần, rồi kiểm chứng và làm bài mới độc lập. Có học liệu Bài 13 đến Bài 17.")
+    st.subheader("Công cụ học Toán V5.2")
+    st.write("- **Hình học động:** ở Góc hỗ trợ, mở mô hình và kéo thanh trượt; dự đoán trước khi nhấn xem nhận xét. Mô hình minh họa, không tự phân tích riêng hình trong đề.\n"
+             "- **Ảnh bài làm:** chọn 'Bài làm của em' trước khi đính kèm ảnh trong ô chat; AI chỉ chép bước viết tay, em bắt buộc đối chiếu, sửa rồi gửi cho gia sư gợi mở.\n"
+             "- **Bàn phím Toán:** chọn ký hiệu, nhập bước làm và nhấn gửi vào hội thoại.\n"
+             "- **Giọng nói:** thu âm tiếng Việt, cho phép gửi đến Gemini để chép lời, kiểm tra rồi nhấn gửi bản chữ; không dùng khi chưa có đồng ý phù hợp.")
     st.subheader("Dành cho học sinh")
     st.write("1. Vào Gia sư Đường tròn, chọn đề hoặc chụp ảnh. 2. Nói điều em đã thử; gia sư ghi nhận theo từng lượt. 3. Khi chưa hiểu, chọn Hỏi dễ hơn / Gợi bằng hình dung / Nhắc kiến thức nền. 4. Xem 🧭 Gia sư đang theo dõi điều gì? để sửa nhận định chưa đúng. 5. Tự kiểm chứng S2, làm bài mới S3 và xuất nhật ký khi cần.")
     st.subheader("Dành cho giáo viên")
@@ -1146,7 +1245,7 @@ with st.sidebar:
         label = "Học liệu dự phòng · chưa dùng Gemini"
     st.caption("🟢 Chế độ: " + label)
     st.caption("Không đăng nhập bằng họ tên thật")
-    st.caption("Phiên bản 5.1 · Gia sư gợi mở thích ứng")
+    st.caption("Phiên bản 5.2 · Công cụ học Toán tương tác")
 
 if selected == "Trang chủ": home()
 elif selected == "Gia sư Đường tròn": circle_topic_tutor()
