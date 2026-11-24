@@ -13,7 +13,8 @@ from typing import Any
 
 from circle_curriculum import LESSONS, EXERCISES, guess_lesson, safe_teacher_context, normalize
 from tutor_engine import ai_is_enabled, secret_value, scrub_private
-
+from khkt_v53 import apply_v53
+  
 
 def detect_difficulty(text: str) -> str:
     n = normalize(text)
