@@ -421,7 +421,15 @@ def ask_tutor(problem: str, student_step: str, lesson_id: str|None,
         if confidence < 3: lesson_id=None
     else:
         confidence=99
-    plan=_make_learning_plan(student_step,lesson_id,messages,learner_model,phase,style)
+    plan=_make_learning_plan(student_step,lesson_id,messages,learner_model,phase,style)     
+    plan=apply_v53(
+        plan,
+        student_step=student_step,
+        lesson_id=lesson_id,
+        messages=messages,
+        phase=phase
+    )
+
     if lesson_id=='b17':
         problem_n=normalize(problem)
         if 'cung tam' in problem_n or 'dong tam' in problem_n:
