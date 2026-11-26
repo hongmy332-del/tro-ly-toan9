@@ -441,6 +441,8 @@ def ask_tutor(problem: str, student_step: str, lesson_id: str|None,
     meta={'lesson':lesson_id,'diagnostic':plan['needs_work'] or diagnostic,'ai_used':False,
           'confidence':confidence,'learning':plan,'hint_level':plan['hint_level'],
           'support_level':f"Gợi mở mức {plan['hint_level']}/3",'api_error':False}
+    
+    print("[KHKT V5.3] AI_GATE", bool(use_ai), bool(ai_is_enabled()), flush=True)
     if not (use_ai and ai_is_enabled()):
         return fallback,'Học liệu giáo viên · dự phòng thích ứng',meta
 
