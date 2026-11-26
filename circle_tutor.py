@@ -442,6 +442,33 @@ def ask_tutor(problem: str, student_step: str, lesson_id: str|None,
           'confidence':confidence,'learning':plan,'hint_level':plan['hint_level'],
           'support_level':f"Gợi mở mức {plan['hint_level']}/3",'api_error':False}
     
+    # Can thiep su pham: phat hien hinh ve sai khoang cach hai tam
+    if lesson_id == "b17":
+        given = re.search(
+            r"O\s*O\s*['’′]?\s*=\s*(\d+(?:[.,]\d+)?)\s*cm",
+            problem, re.I
+        )
+        measured = re.search(
+            r"(?:chỉ\s+có|đo\s+được|đo\s+ra)\s*(\d+(?:[.,]\d+)?)\s*cm",
+            student_step, re.I
+        )
+
+        if given and measured and float(given.group(1).replace(",", ".")) != float(measured.group(1).replace(",", ".")):
+            expected = given.group(1)
+            actual = measured.group(1)
+
+            reply = (
+                f"Em đã phát hiện điểm chưa khớp: hình em đo được {actual} cm, "
+                f"trong khi đề yêu cầu OO' = {expected} cm. "
+                f"Em hãy giữ nguyên tâm O, đặt lại tâm O' sao cho OO' = {expected} cm, "
+                "rồi vẽ lại đường tròn tâm O' theo bán kính đề bài. "
+                "Sau khi sửa, em quan sát thấy hai đường tròn có mấy điểm chung?"
+            )
+
+            meta["diagnostic"] = "Khoảng cách hai tâm trên hình không đúng dữ kiện"
+            meta["ai_used"] = False
+            return reply, "Hướng dẫn kiểm tra hình vẽ", meta
+
     print("[KHKT V5.3] AI_GATE", bool(use_ai), bool(ai_is_enabled()), flush=True)
     if not (use_ai and ai_is_enabled()):
         return fallback,'Học liệu giáo viên · dự phòng thích ứng',meta
