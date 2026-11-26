@@ -693,6 +693,12 @@ def teacher_dashboard():
 
 
 def circle_topic_tutor():
+  
+    if st.session_state.get("v53_debug"):
+        st.warning(
+            "V5.3 DEBUG | " + st.session_state["v53_debug"]
+        )
+
     """Gia sư hội thoại theo tiến trình; cho nhập đề bất kỳ trong toàn chương, giữ mạch S0–S3 ở nền."""
     st.markdown('''<div class="v5-topbar">
         <div class="v5-brand">📘 TRỢ LÝ GỢI MỞ TOÁN 9</div>
@@ -1149,14 +1155,16 @@ def circle_topic_tutor():
                     ss["problem"], user_step, lid, ss["messages"], ss["turns"],
                     ss["use_ai"], chosen_exercise=ss.get("chosen_exercise"),
                     learner_model=ss.get("learner_model", {}), style=ss["style"], phase=ss["phase"]) 
-            st.info(
-                f"V5.3 DEBUG | use_ai={ss.get('use_ai')} | "
+            
+            st.session_state["v53_debug"] = (
+                f"use_ai={ss.get('use_ai')} | "
                 f"ready={ai_is_enabled()} | "
                 f"source={source} | "
                 f"ai_used={meta.get('ai_used', False)} | "
                 f"api_error={meta.get('api_error', False)} | "
                 f"reason={meta.get('fallback_reason', 'none')}"
             )
+
             if meta.get("learning"):
                 # V5.1: bộ xử lý đã xây dựng hồ sơ tạm tích lũy bằng chứng từ các lượt.
                 ss["learner_model"] = meta["learning"]
