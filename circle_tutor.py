@@ -448,10 +448,14 @@ def ask_tutor(problem: str, student_step: str, lesson_id: str|None,
             r"O\s*O\s*['’′]?\s*=\s*(\d+(?:[.,]\d+)?)\s*cm",
             problem, re.I
         )
+        
         measured = re.search(
-            r"(?:chỉ\s+có|đo\s+được|đo\s+ra)\s*(\d+(?:[.,]\d+)?)\s*cm",
+            r"(?:chỉ\s+có|đo\s+được|đo\s+ra|"
+            r"đo\s+khoảng\s+cách\s+(?:giữa\s+)?hai\s+tâm\s+(?:chỉ\s+)?được)"
+            r"\s*(\d+(?:[.,]\d+)?)\s*cm",
             student_step, re.I
         )
+
 
         
        
