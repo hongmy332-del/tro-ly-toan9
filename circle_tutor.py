@@ -454,15 +454,8 @@ def ask_tutor(problem: str, student_step: str, lesson_id: str|None,
         )
 
         
-       print(
-            "[V53_MATCH]",
-            "lesson=", repr(lesson_id),
-            "given=", given.group(0) if given else None,
-            "measured=", measured.group(0) if measured else None,
-            flush=True
-        )
-
-      if given and measured and float(given.group(1).replace(",", ".")) != float(measured.group(1).replace(",", ".")):
+       
+        if given and measured and float(given.group(1).replace(",", ".")) != float(measured.group(1).replace(",", ".")):
             expected = given.group(1)
             actual = measured.group(1)
 
