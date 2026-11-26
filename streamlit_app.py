@@ -1148,7 +1148,15 @@ def circle_topic_tutor():
                 reply, source, meta = ask_tutor(
                     ss["problem"], user_step, lid, ss["messages"], ss["turns"],
                     ss["use_ai"], chosen_exercise=ss.get("chosen_exercise"),
-                    learner_model=ss.get("learner_model", {}), style=ss["style"], phase=ss["phase"])
+                    learner_model=ss.get("learner_model", {}), style=ss["style"], phase=ss["phase"]) 
+            st.info(
+                f"V5.3 DEBUG | use_ai={ss.get('use_ai')} | "
+                f"ready={ai_is_enabled()} | "
+                f"source={source} | "
+                f"ai_used={meta.get('ai_used', False)} | "
+                f"api_error={meta.get('api_error', False)} | "
+                f"reason={meta.get('fallback_reason', 'none')}"
+            )
             if meta.get("learning"):
                 # V5.1: bộ xử lý đã xây dựng hồ sơ tạm tích lũy bằng chứng từ các lượt.
                 ss["learner_model"] = meta["learning"]
