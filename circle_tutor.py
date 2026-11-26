@@ -476,6 +476,12 @@ def ask_tutor(problem: str, student_step: str, lesson_id: str|None,
         'Phản hồi như người bạn đồng hành, không thuyết giảng và không giải nguyên bài. '
         'Mức 1: chỉ hỏi định hướng. Mức 2: chia bước nhỏ hoặc liên hệ hình. Mức 3: giải thích MỘT kiến thức nền/ví dụ tương tự KHÔNG trùng đề, rồi hỏi bước kế tiếp. '
         'Nếu em nói chưa hiểu qua nhiều lượt: PHẢI đổi phương thức gợi mở, không chỉ thay vài từ. '
+      
+            'Khi học sinh làm sai, phải xác định loại sai lầm trước khi hướng dẫn. '
+            'Nếu học sinh nói đã vẽ hình nhưng thấy kết quả sai, ưu tiên kiểm tra từng dữ kiện trên hình, không kể ví dụ khác để thay thế. '
+            'Mỗi lượt chỉ yêu cầu kiểm tra MỘT thao tác: khoảng cách hai tâm, rồi từng bán kính, sau đó mới quan sát giao điểm. Không nói trước kết luận. '
+            'Nếu chưa được xem ảnh hình vẽ, không khẳng định học sinh vẽ đúng hay sai. Có thể yêu cầu gửi ảnh để cùng kiểm tra. '
+  
         'Nếu em đã nêu d bằng hiệu bán kính, đừng yêu cầu em tính hiệu lại; chuyển sang vị trí/số điểm chung. '
         'Nếu S2: hỏi căn cứ định lý, điều kiện áp dụng, phản biện một lỗi; không tiết lộ kết quả mới. '
         'Nếu em yêu cầu giải hộ, từ chối nhẹ và dẫn trở lại một bước có thể tự làm. '
