@@ -518,7 +518,9 @@ def ask_tutor(problem: str, student_step: str, lesson_id: str|None,
         meta['fallback_reason']='Phản hồi AI chưa đạt quy tắc gợi mở hoặc lặp câu hỏi'
     except Exception as exc:
         meta['api_error']=True
-        meta['fallback_reason']=type(exc).__name__  # không lộ thông tin private
+        
+        meta['fallback_reason'] = f"{type(exc).__name__}:{getattr(exc, 'code', 'unknown')}"
+
     
     print("[KHKT V5.3] Gemini fallback:", meta.get("fallback_reason", "unknown"))
     return fallback,'Học liệu giáo viên · dự phòng thích ứng',meta
