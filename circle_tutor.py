@@ -14,6 +14,12 @@ from typing import Any
 from circle_curriculum import LESSONS, EXERCISES, guess_lesson, safe_teacher_context, normalize
 from tutor_engine import ai_is_enabled, secret_value, scrub_private
 from khkt_v53 import apply_v53
+
+from pedagogical_controller import (
+    analyze_pedagogical_state,
+    pedagogy_instruction,
+)
+
   
 
 def detect_difficulty(text: str) -> str:
@@ -430,6 +436,20 @@ def ask_tutor(problem: str, student_step: str, lesson_id: str|None,
         phase=phase
     )
 
+    previous_pedagogy = (
+        learner_model.get("pedagogy_state")
+        if isinstance(learner_model, dict)
+        else None
+    )
+
+    pedagogy_state = analyze_pedagogical_state(
+        student_step,
+        messages,
+        previous_state=previous_pedagogy,
+    )
+
+    plan["pedagogy_state"] = pedagogy_state
+
     if lesson_id=='b17':
         problem_n=normalize(problem)
         if 'cung tam' in problem_n or 'dong tam' in problem_n:
@@ -526,6 +546,8 @@ def ask_tutor(problem: str, student_step: str, lesson_id: str|None,
         '"needs_work" (giả thuyết điểm cần hỗ trợ ngắn), "misconception" (giả thuyết sai lầm, nếu chưa rõ thì rỗng), '
         '"ready_to_check" (boolean). Không tự bịa chứng cứ hoặc suy đoán trình độ HS.'
     )
+  
+    system += "\n\n" + pedagogy_instruction(pedagogy_state)
     try:
         from google import genai
         from google.genai import types
