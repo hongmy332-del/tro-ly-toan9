@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - khkt-v5.3
+      - khkt-v5.3-supham
   workflow_dispatch:
 
 permissions:
