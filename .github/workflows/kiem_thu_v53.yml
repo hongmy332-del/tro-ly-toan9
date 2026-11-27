@@ -33,3 +33,7 @@ jobs:
       - name: Chay bo kiem thu V5.3
         run: |
           python -m unittest -v test_khkt_v53.py
+
+      - name: Kiem thu bo dieu khien su pham T1-T3
+        run: |
+          python -m unittest -v test_pedagogical_controller.py
